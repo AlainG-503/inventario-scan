@@ -81,7 +81,19 @@ th { text-align: left; color: var(--texto-dim); padding: 10px; border-bottom: 1p
 td { padding: 10px; border-bottom: 1px solid #222; }
 code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-radius: 4px; }
 #reader { width: 100%; max-width: 500px; margin: auto; border: 2px solid var(--verde-tecnico); border-radius: 12px; overflow: hidden; }
-    </style>
+
+/* Añade esto al final de tu <style> */
+.btn-delete {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.btn-delete:hover { background: #c0392b; }   
+   </style>
 </head>
 <body>
 
@@ -107,8 +119,7 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
                 <h2>Inventario General (Micros, DI, Monitores)</h2>
                 <div class="scroll-area">
                     <table id="tableGeneral">
-                        <thead><tr><th>ID_QR</th><th>N/S</th><th>Nombre Asignado</th><th>Estado</th></tr></thead>
-                        <tbody id="bodyGeneral"></tbody>
+                    <thead><tr><th>ID_QR</th><th>N/S</th><th>Nombre Asignado</th><th>Estado</th><th>Acción</th></tr></thead>                        <tbody id="bodyGeneral"></tbody>
                     </table>
                 </div>
             </div>
@@ -117,8 +128,7 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
                 <h2>Inventario de Cables</h2>
                 <div class="scroll-area">
                     <table id="tableCables">
-                        <thead><tr><th>ID_QR</th><th>Tipología</th><th>Longitud</th><th>Estado</th></tr></thead>
-                        <tbody id="bodyCables"></tbody>
+                    <thead><tr><th>ID_QR</th><th>N/S</th><th>Longitud</th><th>Estado</th><th>Acción</th></tr></thead>                        <tbody id="bodyCables"></tbody>
                     </table>
                 </div>
             </div>
@@ -242,26 +252,27 @@ const DASHBOARD = {
     },
 
     renderTableGeneral: function(data) {
-        document.getElementById('bodyGeneral').innerHTML = data.map(item => `
-            <tr>
-                <td><code>${item.id_qr}</code></td>
-                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
-                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || ''}</td>
-                <td>
-                    <select onchange="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'estado', this.value)" class="select-status">
-                        <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
-                        <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
-                    </select>
-                </td>
-            </tr>
-        `).join('');
-    },
+    document.getElementById('bodyGeneral').innerHTML = data.map(item => `
+        <tr>
+            <td><code>${item.id_qr}</code></td>
+            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
+            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || ''}</td>
+            <td>
+                <select onchange="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'estado', this.value)" class="select-status">
+                    <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
+                    <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
+                </select>
+            </td>
+            <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('GENERAL', '${item.id_qr}')">🗑️</button></td>
+        </tr>
+    `).join('');
+},
 
-    renderTableCables: function(data) {
+renderTableCables: function(data) {
     document.getElementById('bodyCables').innerHTML = data.map(item => `
         <tr>
             <td><code>${item.id_qr}</code></td>
-            <td>${item.tipo || 'CABLE'}</td>
+            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
             <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'longitud', this.innerText)">${item.longitud || ''}</td>
             <td>
                 <select onchange="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'estado', this.value)" class="select-status">
@@ -269,6 +280,7 @@ const DASHBOARD = {
                     <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
                 </select>
             </td>
+            <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('CABLES', '${item.id_qr}')">🗑️</button></td>
         </tr>
     `).join('');
 },
@@ -282,7 +294,19 @@ const DASHBOARD = {
             DB_MANAGER.save(key, inventario);
         }
     },
-
+    deleteItem: function(type, qrId) {
+        if (confirm(`¿Estás seguro de eliminar el artículo con QR: ${qrId}?`)) {
+            const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
+            let inventario = DB_MANAGER.load(key);
+        
+         // Filtramos el array para quitar el que coincida con el QR
+          inventario = inventario.filter(i => i.id_qr !== qrId);
+        
+          // Guardamos y refrescamos
+           DB_MANAGER.save(key, inventario);
+           this.render();
+       }
+    },
     filterTables: function() {
         const query = document.getElementById('globalSearch').value.toLowerCase();
         document.querySelectorAll('tbody tr').forEach(row => {
