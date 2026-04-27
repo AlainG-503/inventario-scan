@@ -195,36 +195,37 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
         const FOLDER_COLORS = { DRUMS: '#ff5252', BASS: '#7c4dff', GUITARS: '#ffab40', KEYS: '#448aff', VOCALS: '#eeff41', PERC: '#69f0ae' };
 
         // --- GESTOR DE BASE DE DATOS LOCAL ---
-        const DB_MANAGER = {
+       const DB_MANAGER = {
     KEYS: { GENERAL: 'inventario_general', CABLES: 'inventario_cables' },
     save: function(key, data) {
         try { 
             localStorage.setItem(key, JSON.stringify(data));
-            // CADA VEZ QUE GUARDAMOS, SI SOMOS EL PC, AVISAMOS A LOS MÓVILES
-            SyncSystem.broadcastUpdate();
+            // Esta es la clave: si hay cambios, avisamos a todos los dispositivos
+            if (SyncSystem) SyncSystem.broadcastUpdate();
         } catch (error) { console.error("Error localStorage:", error); }
     },
-            load: function(key) { return JSON.parse(localStorage.getItem(key)) || []; },
-            addGeneral: function(item) {
-                let inventario = this.load(this.KEYS.GENERAL);
-                // Evitar duplicados
-                const index = inventario.findIndex(i => i.id_qr === item.id_qr);
-                if(index > -1) inventario[index] = item; else inventario.push(item);
-                this.save(this.KEYS.GENERAL, inventario);
-            },
-            addCable: function(cable) {
-                let inventario = this.load(this.KEYS.CABLES);
-                const index = inventario.findIndex(i => i.id_qr === cable.id_qr);
-                if(index > -1) inventario[index] = cable; else inventario.push(cable);
-                this.save(this.KEYS.CABLES, inventario);
-            }
-        };
+    load: function(key) { return JSON.parse(localStorage.getItem(key)) || []; },
+    addGeneral: function(item) {
+        let inventario = this.load(this.KEYS.GENERAL);
+        const index = inventario.findIndex(i => i.id_qr === item.id_qr);
+        if(index > -1) inventario[index] = item; else inventario.push(item);
+        this.save(this.KEYS.GENERAL, inventario);
+    },
+    addCable: function(cable) {
+        let inventario = this.load(this.KEYS.CABLES);
+        const index = inventario.findIndex(i => i.id_qr === cable.id_qr);
+        if(index > -1) inventario[index] = cable; else inventario.push(cable);
+        this.save(this.KEYS.CABLES, inventario);
+    }
+};
 
         // --- SISTEMA DE SINCRONIZACIÓN (PEER.JS) ---
-    const SyncSystem = {
+const SyncSystem = {
     peer: null,
-    conn: null, // Conexión activa (si somos móvil)
-    connections: [], // Lista de todos los móviles conectados (si somos PC)
+    conn: null, 
+    connections: [], 
+    isPC: true, // Por defecto asumimos que es el PC (Central)
+
     init: function() {
         const id = 'RD-' + Math.random().toString(36).substring(2, 6).toUpperCase();
         this.peer = new Peer(id);
@@ -233,41 +234,43 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
             document.getElementById('display-session-id').innerText = id;
         });
 
-        // Cuando alguien se conecta al PC
         this.peer.on('connection', (c) => {
-            this.connections.push(c); // Guardamos la conexión en la lista
+            this.connections.push(c);
             this.setupListeners(c);
-            alert("¡Dispositivo vinculado!");
-            // Al conectarse un móvil, le mandamos el inventario actual de golpe
-            this.broadcastUpdate();
+            this.broadcastUpdate(); // Al conectar un móvil, le mandamos todo
+            alert("¡Terminal Vinculado!");
+            UI.updateConnectionStatus(true);
         });
     },
+
     setupListeners: function(connection) {
         connection.on('data', (payload) => {
-            // Si recibimos un nuevo escaneo desde el móvil
+            // Si el móvil manda un escaneo al PC
             if(payload.type === 'NEW_ENTRY') {
                 if(payload.category === 'GENERAL') DB_MANAGER.addGeneral(payload.data);
                 else DB_MANAGER.addCable(payload.data);
-                DASHBOARD.render(); 
+                DASHBOARD.render();
+                if(this.isPC) this.broadcastUpdate(); // El PC rebota el cambio a otros móviles
             }
-            // Si recibimos una actualización global desde el PC
+            // Si el PC manda la actualización total a los móviles
             if(payload.type === 'SYNC_ALL') {
                 localStorage.setItem(DB_MANAGER.KEYS.GENERAL, JSON.stringify(payload.general));
                 localStorage.setItem(DB_MANAGER.KEYS.CABLES, JSON.stringify(payload.cables));
+                
+                // CAMBIO DE ID AUTOMÁTICO EN EL MÓVIL
+                document.getElementById('display-session-id').innerText = payload.hostId + " (VINCULADO)";
+                this.isPC = false; // El móvil sabe que ya no es central
                 DASHBOARD.render();
             }
         });
     },
-    // El móvil envía datos al PC
-    sendScan: function(payload) {
-        if (this.conn && this.conn.open) {
-            this.conn.send(payload);
-        }
-    },
-    // El PC envía los datos actualizados a TODOS los móviles conectados
+
     broadcastUpdate: function() {
+        if(!this.isPC) return; // Solo la central emite cambios globales
+        
         const data = {
             type: 'SYNC_ALL',
+            hostId: this.peer.id,
             general: DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL),
             cables: DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)
         };
@@ -275,12 +278,13 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
             if (c.open) c.send(data);
         });
     },
+
     connectToHost: function(hostId) {
         this.conn = this.peer.connect(hostId);
+        this.isPC = false; // Al conectar, pasamos a modo terminal
         this.setupListeners(this.conn);
     }
 };
-
 
 const DASHBOARD = {
     render: function() {
@@ -322,29 +326,27 @@ const DASHBOARD = {
         `).join('');
     },
 
-    updateField: function(type, qrId, field, value) {
+   updateField: function(type, qrId, field, value) {
         const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
         let inventario = DB_MANAGER.load(key);
         const index = inventario.findIndex(i => i.id_qr === qrId);
         if (index > -1) {
             inventario[index][field] = value.trim();
+            // Esto guarda y avisa a los demás dispositivos
             DB_MANAGER.save(key, inventario);
         }
     },
-
    deleteItem: function(type, qrId) {
         if (confirm(`¿Estás seguro de eliminar el artículo con QR: ${qrId}?`)) {
             const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
             let inventario = DB_MANAGER.load(key);
             
-            // Filtramos el inventario para quitar el elemento
+            // Filtramos para borrar
             inventario = inventario.filter(i => i.id_qr !== qrId);
             
-            // ¡ESTO ES LO IMPORTANTE! Al usar DB_MANAGER.save, 
-            // se dispara el broadcast que actualiza todos los móviles.
+            // Guardamos localmente y disparamos la sincronización global
             DB_MANAGER.save(key, inventario);
             
-            // Refrescamos la tabla del PC
             this.render();
         }
     },
