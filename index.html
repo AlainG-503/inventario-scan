@@ -10,6 +10,43 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 
     <style>
+/* Estilos para que el formulario en el móvil sea usable */
+#action-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #1a1a1a;
+    padding: 20px;
+    border-top: 2px solid var(--verde-tecnico);
+    z-index: 2000;
+    border-radius: 20px 20px 0 0;
+}
+
+.input-field {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    background: #000;
+    border: 1px solid #444;
+    color: white;
+    border-radius: 8px;
+    box-sizing: border-box; /* Evita que el input se salga de la pantalla */
+}
+
+.btn-large {
+    width: 100%;
+    padding: 15px;
+    margin: 5px 0;
+    border-radius: 8px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-general { background: #2ecc71 !important; color: #000 !important; font-weight: 800; }
+.btn-cable { background: #e67e22 !important; color: #fff !important; font-weight: 800; }
+.btn-status-ok { background: #2ecc71 !important; color: #000 !important; }
 #reader {
     border: 2px solid #2ecc71 !important;
     border-radius: 12px;
@@ -263,7 +300,8 @@ code {
     </div>
 
     <script>
-        // Diccionarios y Configuración
+       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+       // Diccionarios y Configuración
         const FOLDER_COLORS = { DRUMS: '#ff5252', BASS: '#7c4dff', GUITARS: '#ffab40', KEYS: '#448aff', VOCALS: '#eeff41', PERC: '#69f0ae' };
 
         // --- GESTOR DE BASE DE DATOS LOCAL ---
@@ -309,14 +347,13 @@ code {
             alert("¡Dispositivo vinculado!");
         });
     },
-    // ESTA FUNCIÓN ES LA QUE LE FALTA A TU CÓDIGO
-    sendScan: function(payload) {
+   sendScan: function(payload) {
         if (this.conn && this.conn.open) {
-            // Formateamos para que el PC lo entienda como 'NEW_ENTRY'
+            // Versión robusta que acepta 'data' o 'datos' sin romperse
             this.conn.send({
                 type: 'NEW_ENTRY',
-                category: payload.datos?.tipo || 'GENERAL',
-                data: payload.datos || payload
+                category: payload.category || (payload.data ? payload.data.tipo : 'GENERAL'),
+                data: payload.data || payload.datos || payload
             });
         } else {
             console.warn("No hay conexión activa con el PC");
@@ -346,15 +383,32 @@ code {
                 this.renderTable('bodyCables', DB_MANAGER.load(DB_MANAGER.KEYS.CABLES));
             },
             renderTable: function(elementId, data) {
-                document.getElementById(elementId).innerHTML = data.map(item => `
-                    <tr class="${item.estado === 'ESTROPEADO' ? 'row-alert' : ''}">
-                        <td><code>${item.id_qr}</code></td>
-                        <td>${item.ns || '---'}</td>
-                        <td>${item.nombre_asig || item.tipologia}</td>
-                        <td><span class="status-badge ${item.estado === 'OK' ? 'status-ok' : 'status-broken'}">${item.estado}</span></td>
-                    </tr>
-                `).join('');
-            },
+    document.getElementById(elementId).innerHTML = data.map(item => `
+        <tr data-id="${item.id_qr}">
+            <td><code>${item.id_qr}</code></td>
+            <td contenteditable="true" onblur="DASHBOARD.updateField('${elementId}', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
+            <td contenteditable="true" onblur="DASHBOARD.updateField('${elementId}', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || item.tipologia || ''}</td>
+            <td>
+                <select onchange="DASHBOARD.updateField('${elementId}', '${item.id_qr}', 'estado', this.value)" style="background:#111; color:#fff; border:1px solid #333;">
+                    <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
+                    <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
+                </select>
+            </td>
+        </tr>
+    `).join('');
+},
+
+updateField: function(tableId, qrId, field, value) {
+    const key = tableId === 'bodyGeneral' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
+    let inventario = DB_MANAGER.load(key);
+    const index = inventario.findIndex(i => i.id_qr === qrId);
+    
+    if (index > -1) {
+        inventario[index][field] = value.trim();
+        DB_MANAGER.save(key, inventario);
+        console.log("Cambio guardado en memoria local");
+    }
+},
             filterTables: function() {
                 const query = document.getElementById('globalSearch').value.toLowerCase();
                 document.querySelectorAll('tbody tr').forEach(row => {
@@ -453,16 +507,33 @@ code {
                 `;
                 this.panel.classList.remove('hidden');
             },
-            saveNew: function(type, qrId) {
-                const data = { id_qr: qrId, ns: document.getElementById('n_ser').value, estado: 'OK', timestamp: new Date().getTime(), tipo: type };
-                if(type === 'GENERAL') data.nombre_asig = document.getElementById('n_asig').value;
-                else data.longitud = document.getElementById('longitud').value;
-                
-                if(type === 'GENERAL') DB_MANAGER.addGeneral(data); else DB_MANAGER.addCable(data);
-                SyncSystem.sendScan({ accion: 'NUEVO_REGISTRO', datos: data });
-                this.panel.innerHTML = "<h3>✅ Guardado</h3>";
-                setTimeout(() => this.panel.classList.add('hidden'), 1500);
-            },
+         saveNew: function(type, qrId) {
+            const data = { 
+                id_qr: qrId, 
+                ns: document.getElementById('n_ser').value, 
+                estado: 'OK', 
+                timestamp: new Date().getTime(), 
+                tipo: type,
+                nombre_asig: type === 'GENERAL' ? document.getElementById('n_asig').value : '',
+                longitud: type === 'CABLE' ? document.getElementById('longitud').value : ''
+            };
+
+            // 1. Guardar localmente en el móvil
+            if(type === 'GENERAL') DB_MANAGER.addGeneral(data); else DB_MANAGER.addCable(data);
+            
+            // 2. ENVIAR AL PC con formato compatible
+            SyncSystem.sendScan({ 
+                type: 'NEW_ENTRY', 
+                category: type, 
+                data: data 
+            });
+
+            this.panel.innerHTML = "<h3 style='color:#2ecc71'>✅ Guardado y Sincronizado</h3>";
+            setTimeout(() => {
+                this.panel.classList.add('hidden');
+                DASHBOARD.render(); 
+            }, 1500);
+        },
             updateConnectionStatus: function(isOnline) {
                 const dot = document.getElementById('connection-dot');
                 const text = document.getElementById('connection-text');
@@ -536,7 +607,8 @@ code {
 
      // --- INICIALIZACIÓN GLOBAL ---
 window.onload = () => {
-    DASHBOARD.render();
+    DASHBOARD.render(); 
+    
     SyncSystem.init();
 
     const scanner = new Html5Qrcode("reader");
