@@ -10,56 +10,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 
     <style>
-/* Estilos para que el formulario en el móvil sea usable */
-#action-panel {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #1a1a1a;
-    padding: 20px;
-    border-top: 2px solid var(--verde-tecnico);
-    z-index: 2000;
-    border-radius: 20px 20px 0 0;
-}
-
-.input-field {
-    width: 100%;
-    padding: 12px;
-    margin: 10px 0;
-    background: #000;
-    border: 1px solid #444;
-    color: white;
-    border-radius: 8px;
-    box-sizing: border-box; /* Evita que el input se salga de la pantalla */
-}
-
-.btn-large {
-    width: 100%;
-    padding: 15px;
-    margin: 5px 0;
-    border-radius: 8px;
-    font-weight: bold;
-    border: none;
-    cursor: pointer;
-}
-
-.btn-general { background: #2ecc71 !important; color: #000 !important; font-weight: 800; }
-.btn-cable { background: #e67e22 !important; color: #fff !important; font-weight: 800; }
-.btn-status-ok { background: #2ecc71 !important; color: #000 !important; }
-#reader {
-    border: 2px solid #2ecc71 !important;
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-#reader video {
-    object-fit: cover !important;
-}
-
-/* Ocultar el modal viejo que ya no usaremos */
-#modal-sync { display: none; }
-
 :root {
     --bg-principal: #0f0f0f;
     --bg-tarjeta: #1a1a1a;
@@ -74,149 +24,63 @@
 body { 
     background-color: var(--bg-principal); 
     color: var(--texto-claro); 
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    font-family: 'Inter', sans-serif; 
     margin: 0; 
-    line-height: 1.5;
 }
 
 .hidden { display: none !important; }
 
-/* CABECERA PROFESIONAL */
-.navbar { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    padding: 15px 30px; 
-    background: var(--bg-tarjeta); 
-    border-bottom: 1px solid var(--borde);
+/* Tablas y Edición */
+.edit-cell { cursor: text; transition: background 0.2s; padding: 5px; }
+.edit-cell:hover { background: #222; }
+.edit-cell:focus { background: #333; outline: 1px solid var(--verde-tecnico); }
+
+.select-status { 
+    background: #000; color: #fff; border: 1px solid #444; 
+    padding: 5px; border-radius: 4px; cursor: pointer; width: 100%; 
 }
 
-.navbar h1 { 
-    font-size: 1.2rem; 
-    font-weight: 700; 
-    letter-spacing: 0.5px; 
-    margin: 0; 
-    color: var(--texto-claro);
-    text-transform: uppercase;
+/* UI Móvil */
+#action-panel {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #1a1a1a; padding: 20px;
+    border-top: 2px solid var(--verde-tecnico);
+    z-index: 2000; border-radius: 20px 20px 0 0;
 }
 
-/* BOTONES TÉCNICOS */
-.btn-accion {
-    background: #252525;
-    color: var(--texto-claro);
-    border: 1px solid var(--borde);
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-transform: uppercase;
+.input-field {
+    width: 100%; padding: 12px; margin: 10px 0;
+    background: #000; border: 1px solid #444;
+    color: white; border-radius: 8px; box-sizing: border-box;
 }
 
-.btn-accion:hover { 
-    background: #333; 
-    border-color: #555; 
+.btn-large { 
+    width: 100%; padding: 15px; margin: 5px 0; 
+    border-radius: 8px; font-weight: bold; border: none; cursor: pointer; 
 }
 
-.btn-sync { 
-    border-color: var(--verde-tecnico); 
-    color: var(--verde-tecnico); 
-}
+.btn-general { background: #2ecc71 !important; color: #000 !important; }
+.btn-cable { background: #e67e22 !important; color: #fff !important; }
+.btn-status-ok { background: #2ecc71 !important; color: #000 !important; }
+.btn-status-broken { background: #e74c3c !important; color: #fff !important; }
+.btn-cancel { background: transparent; border: 1px solid #666; color: #ccc; margin-top: 10px; }
 
-/* CONTENEDORES Y TABLAS */
-.container { padding: 20px; }
+/* Barra de estado que te faltaba posicionar bien */
+.status-bar { position: fixed; top: 0; width: 100%; background: #000; padding: 5px 20px; font-size: 12px; display: flex; align-items: center; z-index: 3000; border-bottom: 1px solid #222; }
+.dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.dot-online { background-color: #2ecc71; }
+.dot-offline { background-color: #e74c3c; }
 
-.grid-tablas { 
-    display: grid; 
-    grid-template-columns: 1fr 1fr; 
-    gap: 20px; 
-}
-
-@media (max-width: 900px) { 
-    .grid-tablas { grid-template-columns: 1fr; } 
-}
-
-.card { 
-    background: var(--bg-tarjeta); 
-    border-radius: 8px; 
-    padding: 20px; 
-    border: 1px solid var(--borde);
-}
-
-.card h2 { 
-    font-size: 0.85rem; 
-    color: var(--texto-dim); 
-    text-transform: uppercase; 
-    margin-top: 0; 
-    margin-bottom: 20px; 
-    border-bottom: 1px solid var(--borde); 
-    padding-bottom: 10px; 
-    letter-spacing: 1px;
-}
-
-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-th { text-align: left; color: var(--texto-dim); font-weight: 500; padding: 12px 8px; border-bottom: 1px solid var(--borde); }
-td { padding: 12px 8px; border-bottom: 1px solid #222; }
-
-/* CÓDIGOS QR ESTILO TERMINAL */
-code { 
-    background: #000; 
-    padding: 3px 8px; 
-    border-radius: 4px; 
-    font-family: 'Courier New', monospace; 
-    color: var(--verde-tecnico); 
-    border: 1px solid #222;
-}
-
-/* VENTANA MODAL DE SINCRONIZACIÓN */
-.overlay { 
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    width: 100%; 
-    height: 100%; 
-    background: rgba(0,0,0,0.9); 
-    backdrop-filter: blur(8px);
-    z-index: 1000; 
-    display: flex; 
-    justify-content: center; 
-    align-items: center; 
-}
-
-.modal-sync {
-    background: var(--bg-tarjeta);
-    padding: 40px;
-    border-radius: 12px;
-    border: 1px solid var(--verde-tecnico);
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    box-shadow: 0 0 30px rgba(46, 204, 113, 0.1);
-}
-
-.session-id-display {
-    font-size: 2.8rem;
-    font-family: 'Courier New', monospace;
-    letter-spacing: 6px;
-    color: var(--verde-tecnico);
-    margin: 25px 0;
-    padding: 15px;
-    background: #000;
-    border-radius: 8px;
-    border: 1px solid #333;
-}
-
-/* BADGES DE ESTADO */
-.badge { 
-    padding: 4px 10px; 
-    border-radius: 3px; 
-    font-size: 0.7rem; 
-    font-weight: 800; 
-    text-transform: uppercase;
-}
-.badge-ok { background: rgba(46, 204, 113, 0.15); color: var(--verde-tecnico); }
-.badge-error { background: rgba(231, 76, 60, 0.15); color: var(--rojo-error); }
+/* PC Layout */
+.main-header { padding: 20px; background: var(--bg-tarjeta); display: flex; justify-content: space-between; border-bottom: 1px solid var(--borde); }
+.tables-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
+@media (max-width: 900px) { .tables-container { grid-template-columns: 1fr; } }
+.table-card { background: var(--bg-tarjeta); padding: 15px; border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; color: var(--texto-dim); padding: 10px; border-bottom: 1px solid var(--borde); }
+td { padding: 10px; border-bottom: 1px solid #222; }
+code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-radius: 4px; }
+#reader { width: 100%; max-width: 500px; margin: auto; border: 2px solid var(--verde-tecnico); border-radius: 12px; overflow: hidden; }
     </style>
 </head>
 <body>
@@ -348,17 +212,12 @@ code {
         });
     },
    sendScan: function(payload) {
-        if (this.conn && this.conn.open) {
-            // Versión robusta que acepta 'data' o 'datos' sin romperse
-            this.conn.send({
-                type: 'NEW_ENTRY',
-                category: payload.category || (payload.data ? payload.data.tipo : 'GENERAL'),
-                data: payload.data || payload.datos || payload
-            });
-        } else {
-            console.warn("No hay conexión activa con el PC");
-        }
-    },
+    if (this.conn && this.conn.open) {
+        this.conn.send(payload);
+    } else {
+        console.warn("No hay conexión activa con el PC");
+    }
+},
     setupListeners: function() {
         this.conn.on('data', (payload) => {
             if(payload.type === 'NEW_ENTRY') {
@@ -376,20 +235,36 @@ code {
 };
 
 
-        // --- DASHBOARD (INTERFAZ PC) ---
-        const DASHBOARD = {
-            render: function() {
-                this.renderTable('bodyGeneral', DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL));
-                this.renderTable('bodyCables', DB_MANAGER.load(DB_MANAGER.KEYS.CABLES));
-            },
-            renderTable: function(elementId, data) {
-    document.getElementById(elementId).innerHTML = data.map(item => `
-        <tr data-id="${item.id_qr}">
+const DASHBOARD = {
+    render: function() {
+        this.renderTableGeneral(DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL));
+        this.renderTableCables(DB_MANAGER.load(DB_MANAGER.KEYS.CABLES));
+    },
+
+    renderTableGeneral: function(data) {
+        document.getElementById('bodyGeneral').innerHTML = data.map(item => `
+            <tr>
+                <td><code>${item.id_qr}</code></td>
+                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
+                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || ''}</td>
+                <td>
+                    <select onchange="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'estado', this.value)" class="select-status">
+                        <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
+                        <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
+                    </select>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    renderTableCables: function(data) {
+    document.getElementById('bodyCables').innerHTML = data.map(item => `
+        <tr>
             <td><code>${item.id_qr}</code></td>
-            <td contenteditable="true" onblur="DASHBOARD.updateField('${elementId}', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
-            <td contenteditable="true" onblur="DASHBOARD.updateField('${elementId}', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || item.tipologia || ''}</td>
+            <td>${item.tipo || 'CABLE'}</td>
+            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'longitud', this.innerText)">${item.longitud || ''}</td>
             <td>
-                <select onchange="DASHBOARD.updateField('${elementId}', '${item.id_qr}', 'estado', this.value)" style="background:#111; color:#fff; border:1px solid #333;">
+                <select onchange="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'estado', this.value)" class="select-status">
                     <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
                     <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
                 </select>
@@ -398,24 +273,23 @@ code {
     `).join('');
 },
 
-updateField: function(tableId, qrId, field, value) {
-    const key = tableId === 'bodyGeneral' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
-    let inventario = DB_MANAGER.load(key);
-    const index = inventario.findIndex(i => i.id_qr === qrId);
-    
-    if (index > -1) {
-        inventario[index][field] = value.trim();
-        DB_MANAGER.save(key, inventario);
-        console.log("Cambio guardado en memoria local");
+    updateField: function(type, qrId, field, value) {
+        const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
+        let inventario = DB_MANAGER.load(key);
+        const index = inventario.findIndex(i => i.id_qr === qrId);
+        if (index > -1) {
+            inventario[index][field] = value.trim();
+            DB_MANAGER.save(key, inventario);
+        }
+    },
+
+    filterTables: function() {
+        const query = document.getElementById('globalSearch').value.toLowerCase();
+        document.querySelectorAll('tbody tr').forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
+        });
     }
-},
-            filterTables: function() {
-                const query = document.getElementById('globalSearch').value.toLowerCase();
-                document.querySelectorAll('tbody tr').forEach(row => {
-                    row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
-                });
-            }
-        };
+};
 
         // --- LÓGICA DE PDF Y MAPEO ---
         const PDF_PROCESSOR = {
@@ -507,33 +381,33 @@ updateField: function(tableId, qrId, field, value) {
                 `;
                 this.panel.classList.remove('hidden');
             },
-         saveNew: function(type, qrId) {
-            const data = { 
-                id_qr: qrId, 
-                ns: document.getElementById('n_ser').value, 
-                estado: 'OK', 
-                timestamp: new Date().getTime(), 
-                tipo: type,
-                nombre_asig: type === 'GENERAL' ? document.getElementById('n_asig').value : '',
-                longitud: type === 'CABLE' ? document.getElementById('longitud').value : ''
-            };
+saveNew: function(type, qrId) {
+    const data = { 
+        id_qr: qrId, 
+        ns: document.getElementById('n_ser').value, 
+        estado: 'OK', 
+        timestamp: new Date().getTime(), 
+        tipo: type,
+        nombre_asig: type === 'GENERAL' ? document.getElementById('n_asig').value : '',
+        longitud: type === 'CABLE' ? document.getElementById('longitud').value : '',
+        tipologia: type === 'CABLE' ? 'Cable/Adaptador' : 'Micro/DI'
+    };
 
-            // 1. Guardar localmente en el móvil
-            if(type === 'GENERAL') DB_MANAGER.addGeneral(data); else DB_MANAGER.addCable(data);
-            
-            // 2. ENVIAR AL PC con formato compatible
-            SyncSystem.sendScan({ 
-                type: 'NEW_ENTRY', 
-                category: type, 
-                data: data 
-            });
+    if(type === 'GENERAL') DB_MANAGER.addGeneral(data); else DB_MANAGER.addCable(data);
+    
+    // Aquí enviamos la categoría correcta (GENERAL o CABLES) para que el receptor la procese
+    SyncSystem.sendScan({ 
+        type: 'NEW_ENTRY', 
+        category: type === 'GENERAL' ? 'GENERAL' : 'CABLES', 
+        data: data 
+    });
 
-            this.panel.innerHTML = "<h3 style='color:#2ecc71'>✅ Guardado y Sincronizado</h3>";
-            setTimeout(() => {
-                this.panel.classList.add('hidden');
-                DASHBOARD.render(); 
-            }, 1500);
-        },
+    this.panel.innerHTML = "<h3 style='color:#2ecc71; text-align:center'>✅ Sincronizado</h3>";
+    setTimeout(() => {
+        this.panel.classList.add('hidden');
+        DASHBOARD.render(); 
+    }, 1200);
+},
             updateConnectionStatus: function(isOnline) {
                 const dot = document.getElementById('connection-dot');
                 const text = document.getElementById('connection-text');
