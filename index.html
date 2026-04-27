@@ -196,11 +196,14 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
 
         // --- GESTOR DE BASE DE DATOS LOCAL ---
         const DB_MANAGER = {
-            KEYS: { GENERAL: 'inventario_general', CABLES: 'inventario_cables' },
-            save: function(key, data) {
-                try { localStorage.setItem(key, JSON.stringify(data)); } 
-                catch (error) { console.error("Error localStorage:", error); }
-            },
+    KEYS: { GENERAL: 'inventario_general', CABLES: 'inventario_cables' },
+    save: function(key, data) {
+        try { 
+            localStorage.setItem(key, JSON.stringify(data));
+            // CADA VEZ QUE GUARDAMOS, SI SOMOS EL PC, AVISAMOS A LOS MÓVILES
+            SyncSystem.broadcastUpdate();
+        } catch (error) { console.error("Error localStorage:", error); }
+    },
             load: function(key) { return JSON.parse(localStorage.getItem(key)) || []; },
             addGeneral: function(item) {
                 let inventario = this.load(this.KEYS.GENERAL);
@@ -220,43 +223,61 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
         // --- SISTEMA DE SINCRONIZACIÓN (PEER.JS) ---
     const SyncSystem = {
     peer: null,
-    conn: null,
+    conn: null, // Conexión activa (si somos móvil)
+    connections: [], // Lista de todos los móviles conectados (si somos PC)
     init: function() {
         const id = 'RD-' + Math.random().toString(36).substring(2, 6).toUpperCase();
         this.peer = new Peer(id);
         
         this.peer.on('open', (id) => {
             document.getElementById('display-session-id').innerText = id;
-            // Si detectamos que es un móvil (puedes añadir un prompt o botón)
-            // se podría conectar aquí. Por ahora, el PC solo escucha:
         });
 
+        // Cuando alguien se conecta al PC
         this.peer.on('connection', (c) => {
-            this.conn = c;
-            this.setupListeners();
+            this.connections.push(c); // Guardamos la conexión en la lista
+            this.setupListeners(c);
             alert("¡Dispositivo vinculado!");
+            // Al conectarse un móvil, le mandamos el inventario actual de golpe
+            this.broadcastUpdate();
         });
     },
-   sendScan: function(payload) {
-    if (this.conn && this.conn.open) {
-        this.conn.send(payload);
-    } else {
-        console.warn("No hay conexión activa con el PC");
-    }
-},
-    setupListeners: function() {
-        this.conn.on('data', (payload) => {
+    setupListeners: function(connection) {
+        connection.on('data', (payload) => {
+            // Si recibimos un nuevo escaneo desde el móvil
             if(payload.type === 'NEW_ENTRY') {
                 if(payload.category === 'GENERAL') DB_MANAGER.addGeneral(payload.data);
                 else DB_MANAGER.addCable(payload.data);
                 DASHBOARD.render(); 
             }
+            // Si recibimos una actualización global desde el PC
+            if(payload.type === 'SYNC_ALL') {
+                localStorage.setItem(DB_MANAGER.KEYS.GENERAL, JSON.stringify(payload.general));
+                localStorage.setItem(DB_MANAGER.KEYS.CABLES, JSON.stringify(payload.cables));
+                DASHBOARD.render();
+            }
         });
     },
-    // Función para que el MÓVIL se conecte al PC
+    // El móvil envía datos al PC
+    sendScan: function(payload) {
+        if (this.conn && this.conn.open) {
+            this.conn.send(payload);
+        }
+    },
+    // El PC envía los datos actualizados a TODOS los móviles conectados
+    broadcastUpdate: function() {
+        const data = {
+            type: 'SYNC_ALL',
+            general: DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL),
+            cables: DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)
+        };
+        this.connections.forEach(c => {
+            if (c.open) c.send(data);
+        });
+    },
     connectToHost: function(hostId) {
         this.conn = this.peer.connect(hostId);
-        this.setupListeners();
+        this.setupListeners(this.conn);
     }
 };
 
@@ -311,12 +332,19 @@ const DASHBOARD = {
         }
     },
 
-    deleteItem: function(type, qrId) {
+   deleteItem: function(type, qrId) {
         if (confirm(`¿Estás seguro de eliminar el artículo con QR: ${qrId}?`)) {
             const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
             let inventario = DB_MANAGER.load(key);
+            
+            // Filtramos el inventario para quitar el elemento
             inventario = inventario.filter(i => i.id_qr !== qrId);
+            
+            // ¡ESTO ES LO IMPORTANTE! Al usar DB_MANAGER.save, 
+            // se dispara el broadcast que actualiza todos los móviles.
             DB_MANAGER.save(key, inventario);
+            
+            // Refrescamos la tabla del PC
             this.render();
         }
     },
@@ -446,15 +474,29 @@ saveNew: function(type, qrId) {
         DASHBOARD.render(); 
     }, 1200);
 },
-            updateConnectionStatus: function(isOnline) {
-                const dot = document.getElementById('connection-dot');
-                const text = document.getElementById('connection-text');
-                if (isOnline) {
-                    dot.className = "dot dot-online"; text.innerText = "ONLINE"; text.style.color = "#00e676";
-                } else {
-                    dot.className = "dot dot-offline"; text.innerText = "OFFLINE"; text.style.color = "#ff5252";
-                }
-            },
+            updateConnectionStatus: function(isOnline = true) {
+        const dot = document.getElementById('connection-dot');
+        const text = document.getElementById('connection-text');
+        
+        if (isOnline) {
+            // Si hay móviles vinculados al PC, mostramos cuántos
+            const activos = SyncSystem.connections ? SyncSystem.connections.filter(c => c.open).length : 0;
+            
+            dot.className = "dot dot-online";
+            text.style.color = "#00e676";
+            
+            if (activos > 0) {
+                text.innerText = `ONLINE (${activos} dispositivos)`;
+            } else {
+                text.innerText = "ONLINE (Esperando vinculación...)";
+            }
+        } else {
+            // Este es el ELSE que preguntabas: se activa si falla el internet o PeerJS
+            dot.className = "dot dot-offline";
+            text.innerText = "OFFLINE - Error de Red";
+            text.style.color = "#ff5252";
+        }
+    },
             notifyOffline: function() {
                 const toast = document.getElementById('offline-toast');
                 toast.innerText = `⚠️ ${SyncSystem.offlineQueue.length} pendientes`;
