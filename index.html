@@ -83,74 +83,83 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
 #reader { width: 100%; max-width: 500px; margin: auto; border: 2px solid var(--verde-tecnico); border-radius: 12px; overflow: hidden; }
 
 /* Añade esto al final de tu <style> */
-.btn-delete {
+#reader { 
+    width: 100%; 
+    max-width: 450px; 
+    margin: 0 auto; 
+}
+    .btn-delete {
     background: #e74c3c;
     color: white;
     border: none;
-    padding: 5px 10px;
+    padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
 }
 .btn-delete:hover { background: #c0392b; }   
    </style>
 </head>
 <body>
+    <div class="status-bar">
+        <span id="connection-dot" class="dot dot-online"></span>
+        <span id="connection-text" style="color: #00e676; font-weight: bold;">ONLINE</span>
+        <span id="offline-toast" class="hidden" style="margin-left: auto; color: #ff9800; font-size: 0.8rem;"></span>
+    </div>
+
+    <div id="mobile-app" style="padding: 10px; margin-top: 35px;">
+        <div id="reader-container">
+            <div id="reader"></div>
+        </div>
+        <div id="mobile-sync-controls" style="background: #222; padding: 15px; margin: 10px 0; border-radius: 10px; display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="input-host-id" placeholder="Código PC (ej: RD-A1B2)" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #000; color: #fff;">
+            <button onclick="SyncSystem.connectToHost(document.getElementById('input-host-id').value)" style="background: var(--verde-tecnico); border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">Vincular</button>
+        </div>
+        <div id="action-panel" class="hidden" style="margin-top: 10px;"></div>
+
+        <div id="loadout-screen" class="hidden">
+            <div class="counter-header" style="text-align: center; padding: 20px; background: #111; border-radius: 10px; margin-bottom: 10px;">
+                <span id="items-left-count" style="font-size: 3rem; color: var(--verde-tecnico);">0</span>
+                <p>EQUIPOS PENDIENTES</p>
+            </div>
+            <button class="btn-large" style="background: #333; color: white;" onclick="document.getElementById('loadout-screen').classList.add('hidden')">Cerrar Recogida</button>
+        </div>
+    </div>
 
     <div id="pc-dashboard">
         <header class="main-header">
             <div>
-              <h1>Gestor de Inventario Raider</h1>
-<div id="sync-code">SESIÓN: <span id="display-session-id" style="color: var(--verde-tecnico); font-weight: bold;">---</span></div>            </div>
+                <h1>Gestor de Inventario Raider</h1>
+                <div id="sync-code">SESIÓN: <span id="display-session-id" style="color: var(--verde-tecnico); font-weight: bold;">---</span></div>
+            </div>
             <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
                 <input type="file" id="pdf-upload" style="display: none;" onchange="PDF_PROCESSOR.extraerRider(this.files[0])">
-                <button class="btn-report" style="background: #2196f3; color: white;" onclick="document.getElementById('pdf-upload').click()">📂 Cargar Rider (PDF)</button>
-                <button class="btn-report" onclick="MAINTENANCE.generateReport()">📋 Reporte Mantenimiento</button>
-                <button class="btn-report" style="background: #e91e63; color: white;" onclick="LOAD_OUT.activar()">📦 Iniciar Recogida</button>
+                <button class="btn-large" style="background: #2196f3; color: white; width: auto; padding: 10px 20px;" onclick="document.getElementById('pdf-upload').click()">📂 Cargar Rider</button>
+                <button class="btn-large" style="width: auto; padding: 10px 20px;" onclick="MAINTENANCE.generateReport()">📋 Reporte</button>
+                <button class="btn-large" style="background: #e91e63; color: white; width: auto; padding: 10px 20px;" onclick="LOAD_OUT.activar()">📦 Recogida</button>
             </div>
         </header>
 
-        <section class="search-section">
-            <input type="text" id="globalSearch" placeholder="🔍 Buscar por ID_QR, Nombre o N/S..." onkeyup="DASHBOARD.filterTables()">
+        <section class="search-section" style="padding: 20px;">
+            <input type="text" id="globalSearch" class="input-field" placeholder="🔍 Buscar por ID_QR, Nombre o N/S..." onkeyup="DASHBOARD.filterTables()">
         </section>
 
         <div class="tables-container">
             <div class="table-card">
-                <h2>Inventario General (Micros, DI, Monitores)</h2>
-                <div class="scroll-area">
-                    <table id="tableGeneral">
-                    <thead><tr><th>ID_QR</th><th>N/S</th><th>Nombre Asignado</th><th>Estado</th><th>Acción</th></tr></thead>                        <tbody id="bodyGeneral"></tbody>
-                    </table>
-                </div>
+                <h2>Inventario General</h2>
+                <table id="tableGeneral">
+                    <thead><tr><th>ID_QR</th><th>N/S</th><th>Nombre</th><th>Estado</th><th>Acción</th></tr></thead>
+                    <tbody id="bodyGeneral"></tbody>
+                </table>
             </div>
 
             <div class="table-card">
                 <h2>Inventario de Cables</h2>
-                <div class="scroll-area">
-                    <table id="tableCables">
-                    <thead><tr><th>ID_QR</th><th>N/S</th><th>Longitud</th><th>Estado</th><th>Acción</th></tr></thead>                        <tbody id="bodyCables"></tbody>
-                    </table>
-                </div>
+                <table id="tableCables">
+                    <thead><tr><th>ID_QR</th><th>N/S</th><th>Longitud</th><th>Estado</th><th>Acción</th></tr></thead>
+                    <tbody id="bodyCables"></tbody>
+                </table>
             </div>
-        </div>
-    </div>
-
-    <div id="mobile-app" style="padding: 10px;">
-        <div id="reader-container">
-            <div id="reader"></div>
-        </div>
-<div id="mobile-sync-controls" style="background: #222; padding: 10px; margin-bottom: 10px;">
-    <input type="text" id="input-host-id" placeholder="Código PC (ej: RD-A1B2)" style="width: 60%;">
-    <button onclick="SyncSystem.connectToHost(document.getElementById('input-host-id').value)">Vincular</button>
-</div>
-        <div id="action-panel" class="hidden" style="margin-top: 20px;"></div>
-
-        <div id="loadout-screen" class="hidden">
-            <div class="counter-header">
-                <span id="items-left-count">0</span>
-                <p>EQUIPOS PENDIENTES</p>
-            </div>
-            <button class="btn-large" style="background: #333; color: white;" onclick="document.getElementById('loadout-screen').classList.add('hidden')">Cerrar Recogida</button>
         </div>
     </div>
 
@@ -166,14 +175,7 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
             <button class="btn-cancel" onclick="document.getElementById('confirm-module').classList.add('hidden')">CANCELAR</button>
         </div>
     </div>
-
-    <div class="status-bar">
-        <span id="connection-dot" class="dot dot-online"></span>
-        <span id="connection-text" style="color: #00e676; font-weight: bold;">ONLINE</span>
-        <span id="offline-toast" class="hidden" style="margin-left: auto; color: #ff9800; font-size: 0.8rem;"></span>
-    </div>
-
-    <script>
+<script>
        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
        // Diccionarios y Configuración
         const FOLDER_COLORS = { DRUMS: '#ff5252', BASS: '#7c4dff', GUITARS: '#ffab40', KEYS: '#448aff', VOCALS: '#eeff41', PERC: '#69f0ae' };
@@ -252,38 +254,38 @@ const DASHBOARD = {
     },
 
     renderTableGeneral: function(data) {
-    document.getElementById('bodyGeneral').innerHTML = data.map(item => `
-        <tr>
-            <td><code>${item.id_qr}</code></td>
-            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
-            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || ''}</td>
-            <td>
-                <select onchange="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'estado', this.value)" class="select-status">
-                    <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
-                    <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
-                </select>
-            </td>
-            <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('GENERAL', '${item.id_qr}')">🗑️</button></td>
-        </tr>
-    `).join('');
-},
+        document.getElementById('bodyGeneral').innerHTML = data.map(item => `
+            <tr>
+                <td><code>${item.id_qr}</code></td>
+                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
+                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || ''}</td>
+                <td>
+                    <select onchange="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'estado', this.value)" class="select-status">
+                        <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
+                        <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
+                    </select>
+                </td>
+                <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('GENERAL', '${item.id_qr}')">🗑️</button></td>
+            </tr>
+        `).join('');
+    },
 
-renderTableCables: function(data) {
-    document.getElementById('bodyCables').innerHTML = data.map(item => `
-        <tr>
-            <td><code>${item.id_qr}</code></td>
-            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
-            <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'longitud', this.innerText)">${item.longitud || ''}</td>
-            <td>
-                <select onchange="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'estado', this.value)" class="select-status">
-                    <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
-                    <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
-                </select>
-            </td>
-            <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('CABLES', '${item.id_qr}')">🗑️</button></td>
-        </tr>
-    `).join('');
-},
+    renderTableCables: function(data) {
+        document.getElementById('bodyCables').innerHTML = data.map(item => `
+            <tr>
+                <td><code>${item.id_qr}</code></td>
+                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
+                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'longitud', this.innerText)">${item.longitud || ''}</td>
+                <td>
+                    <select onchange="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'estado', this.value)" class="select-status">
+                        <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
+                        <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
+                    </select>
+                </td>
+                <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('CABLES', '${item.id_qr}')">🗑️</button></td>
+            </tr>
+        `).join('');
+    },
 
     updateField: function(type, qrId, field, value) {
         const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
@@ -294,19 +296,17 @@ renderTableCables: function(data) {
             DB_MANAGER.save(key, inventario);
         }
     },
+
     deleteItem: function(type, qrId) {
         if (confirm(`¿Estás seguro de eliminar el artículo con QR: ${qrId}?`)) {
             const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
             let inventario = DB_MANAGER.load(key);
-        
-         // Filtramos el array para quitar el que coincida con el QR
-          inventario = inventario.filter(i => i.id_qr !== qrId);
-        
-          // Guardamos y refrescamos
-           DB_MANAGER.save(key, inventario);
-           this.render();
-       }
+            inventario = inventario.filter(i => i.id_qr !== qrId);
+            DB_MANAGER.save(key, inventario);
+            this.render();
+        }
     },
+
     filterTables: function() {
         const query = document.getElementById('globalSearch').value.toLowerCase();
         document.querySelectorAll('tbody tr').forEach(row => {
