@@ -98,6 +98,18 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
     font-size: 0.9rem;
 }
 .btn-delete:hover { background: #c0392b; }   
+.loadout-active {
+    border: 3px solid #2ecc71;
+    box-shadow: 0 0 15px #2ecc71;
+}
+
+.loadout-active .status-bar {
+    background: #002b1a;
+}
+
+.loadout-active #items-left-count {
+    color: #00ff9c !important;
+}
    </style>
 </head>
 <body>
@@ -128,7 +140,6 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
                 <span id="items-left-count" style="font-size: 4rem; color: var(--verde-tecnico); font-weight: bold;">0</span>
                 <p style="margin: 0; color: #888;">EQUIPOS PENDIENTES</p>
             </div>
-            <button class="btn-large" style="background: #333; color: white;" onclick="document.getElementById('loadout-screen').classList.add('hidden')">Cerrar Recogida</button>
         </div>
     </div>
 
@@ -142,7 +153,7 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
                 <input type="file" id="pdf-upload" style="display: none;" onchange="PDF_PROCESSOR.extraerRider(this.files[0])">
                 <button class="btn-large" style="background: #2196f3; color: white; width: auto; padding: 10px 15px;" onclick="document.getElementById('pdf-upload').click()">📂 Cargar Rider</button>
                 <button class="btn-large" style="width: auto; padding: 10px 15px;" onclick="MAINTENANCE.generateReport()">📋 Reporte</button>
-                <button class="btn-large" style="background: #e91e63; color: white; width: auto; padding: 10px 15px;" onclick="LOAD_OUT.activar()">📦 Recogida</button>
+<button class="btn-large" style="background: #e91e63; color: white; width: auto; padding: 10px 15px;" onclick="LOAD_OUT.activar()">📦 Recogida</button>    
             </div>
         </header>
 
@@ -187,426 +198,242 @@ code { background: #000; color: var(--verde-tecnico); padding: 2px 6px; border-r
     </div>
 
 <script>
-    // Configuración de PDF.js
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+// =====================================================
+// PDF.JS CONFIG
+// =====================================================
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
 
-    // --- Diccionarios y Configuración ---       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-       // Diccionarios y Configuración
-        const FOLDER_COLORS = { DRUMS: '#ff5252', BASS: '#7c4dff', GUITARS: '#ffab40', KEYS: '#448aff', VOCALS: '#eeff41', PERC: '#69f0ae' };
+// =====================================================
+// UI SAFE (EVITA CRASHES)
+// =====================================================
+const UI = {
+  updateConnectionStatus(ok) {
+    const el = document.getElementById("connection-text");
+    const dot = document.getElementById("connection-dot");
 
-        // --- GESTOR DE BASE DE DATOS LOCAL ---
-       const DB_MANAGER = {
-    KEYS: { GENERAL: 'inventario_general', CABLES: 'inventario_cables' },
-    save: function(key, data) {
-        try { 
-            localStorage.setItem(key, JSON.stringify(data));
-            // Esta es la clave: si hay cambios, avisamos a todos los dispositivos
-            if (SyncSystem) SyncSystem.broadcastUpdate();
-        } catch (error) { console.error("Error localStorage:", error); }
-    },
-    load: function(key) { return JSON.parse(localStorage.getItem(key)) || []; },
-    addGeneral: function(item) {
-        let inventario = this.load(this.KEYS.GENERAL);
-        const index = inventario.findIndex(i => i.id_qr === item.id_qr);
-        if(index > -1) inventario[index] = item; else inventario.push(item);
-        this.save(this.KEYS.GENERAL, inventario);
-    },
-    addCable: function(cable) {
-        let inventario = this.load(this.KEYS.CABLES);
-        const index = inventario.findIndex(i => i.id_qr === cable.id_qr);
-        if(index > -1) inventario[index] = cable; else inventario.push(cable);
-        this.save(this.KEYS.CABLES, inventario);
+    if (!el || !dot) return;
+
+    el.innerText = ok ? "ONLINE" : "OFFLINE";
+    dot.className = ok ? "dot dot-online" : "dot dot-offline";
+  },
+
+  showExistingItem(item, canal = null) {
+    if (canal) {
+      alert(
+        `🎯 ${item.nombre_asig || "ITEM"}\n` +
+        `➡️ CANAL ${canal.canal}\n` +
+        `🎚️ ${canal.instrumento}`
+      );
+    } else {
+      alert(`⚠️ ${item.nombre_asig || "ITEM"}\n(No está en el Rider)`);
     }
+  },
+
+  showNewItemForm(id) {
+    alert("❌ ITEM NO REGISTRADO: " + id);
+  }
 };
 
-        // --- SISTEMA DE SINCRONIZACIÓN (PEER.JS) ---
-const SyncSystem = {
-    peer: null,
-    conn: null, 
-    connections: [], 
-    isPC: true,
+// =====================================================
+// RIDER PDF PROCESSOR
+// =====================================================
+const PDF_PROCESSOR = {
+  listaCanales: [],
 
-    init: function() {
-        const id = 'RD-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-        this.peer = new Peer(id);
-        
-        this.peer.on('open', (id) => {
-            document.getElementById('display-session-id').innerText = id;
-        });
+  async extraerRider(file) {
+    if (!file) return;
 
-        this.peer.on('connection', (c) => {
-            this.connections.push(c);
-            this.setupListeners(c);
-            this.broadcastUpdate(); 
-            UI.updateConnectionStatus(true);
-        });
-    },
+    const reader = new FileReader();
 
-    setupListeners: function(connection) {
-        connection.on('data', (payload) => {
-            // Caso A: El PC recibe un escaneo nuevo del móvil
-            if(payload.type === 'NEW_ENTRY') {
-                if(payload.category === 'GENERAL') DB_MANAGER.addGeneral(payload.data);
-                else DB_MANAGER.addCable(payload.data);
-                DASHBOARD.render();
-                if(this.isPC) this.broadcastUpdate(); 
-            }
-            // Caso B: El móvil recibe la base de datos completa del PC
-            if(payload.type === 'SYNC_ALL') {
-                localStorage.setItem(DB_MANAGER.KEYS.GENERAL, JSON.stringify(payload.general));
-                localStorage.setItem(DB_MANAGER.KEYS.CABLES, JSON.stringify(payload.cables));
-                document.getElementById('display-session-id').innerText = payload.hostId + " (VINCULADO)";
-                this.isPC = false;
-                DASHBOARD.render();
-            }
-        });
-    },
+    reader.onload = async () => {
+      try {
+        const pdf = await pdfjsLib.getDocument(
+          new Uint8Array(reader.result)
+        ).promise;
 
-    // ESTA FUNCIÓN FALTABA Y ES POR LO QUE EL MÓVIL NO ENVIABA NADA
-    sendScan: function(data) {
-        if (this.isPC) return; // El PC no envía escaneos individuales
-        if (this.conn && this.conn.open) {
-            this.conn.send(data);
-        } else {
-            alert("No hay conexión con el PC");
+        let text = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(x => x.str).join(" ") + "\n";
         }
-    },
 
-    broadcastUpdate: function() {
-        if(!this.isPC) return; 
-        const data = {
-            type: 'SYNC_ALL',
-            hostId: this.peer.id,
-            general: DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL),
-            cables: DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)
-        };
-        this.connections.forEach(c => {
-            if (c.open) c.send(data);
-        });
-    },
+        this.parsearCanales(text);
 
-    connectToHost: function(hostId) {
-        this.conn = this.peer.connect(hostId);
-        this.isPC = false;
-        this.setupListeners(this.conn);
-        this.conn.on('open', () => UI.updateConnectionStatus(true));
-    }
-};
-const DASHBOARD = {
-    render: function() {
-        this.renderTableGeneral(DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL));
-        this.renderTableCables(DB_MANAGER.load(DB_MANAGER.KEYS.CABLES));
-    },
-
-    renderTableGeneral: function(data) {
-        document.getElementById('bodyGeneral').innerHTML = data.map(item => `
-            <tr>
-                <td><code>${item.id_qr}</code></td>
-                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
-                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'nombre_asig', this.innerText)">${item.nombre_asig || ''}</td>
-                <td>
-                    <select onchange="DASHBOARD.updateField('GENERAL', '${item.id_qr}', 'estado', this.value)" class="select-status">
-                        <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
-                        <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
-                    </select>
-                </td>
-                <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('GENERAL', '${item.id_qr}')">🗑️</button></td>
-            </tr>
-        `).join('');
-    },
-
-    renderTableCables: function(data) {
-        document.getElementById('bodyCables').innerHTML = data.map(item => `
-            <tr>
-                <td><code>${item.id_qr}</code></td>
-                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'ns', this.innerText)">${item.ns || ''}</td>
-                <td contenteditable="true" class="edit-cell" onblur="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'longitud', this.innerText)">${item.longitud || ''}</td>
-                <td>
-                    <select onchange="DASHBOARD.updateField('CABLES', '${item.id_qr}', 'estado', this.value)" class="select-status">
-                        <option value="OK" ${item.estado === 'OK' ? 'selected' : ''}>OK</option>
-                        <option value="ESTROPEADO" ${item.estado === 'ESTROPEADO' ? 'selected' : ''}>ESTROPEADO</option>
-                    </select>
-                </td>
-                <td><button class="btn-delete" onclick="DASHBOARD.deleteItem('CABLES', '${item.id_qr}')">🗑️</button></td>
-            </tr>
-        `).join('');
-    },
-
-   updateField: function(type, qrId, field, value) {
-        const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
-        let inventario = DB_MANAGER.load(key);
-        const index = inventario.findIndex(i => i.id_qr === qrId);
-        if (index > -1) {
-            inventario[index][field] = value.trim();
-            // Esto guarda y avisa a los demás dispositivos
-            DB_MANAGER.save(key, inventario);
-        }
-    },
-   deleteItem: function(type, qrId) {
-        if (confirm(`¿Estás seguro de eliminar el artículo con QR: ${qrId}?`)) {
-            const key = type === 'GENERAL' ? DB_MANAGER.KEYS.GENERAL : DB_MANAGER.KEYS.CABLES;
-            let inventario = DB_MANAGER.load(key);
-            
-            // Filtramos para borrar
-            inventario = inventario.filter(i => i.id_qr !== qrId);
-            
-            // Guardamos localmente y disparamos la sincronización global
-            DB_MANAGER.save(key, inventario);
-            
-            this.render();
-        }
-    },
-
-    filterTables: function() {
-        const query = document.getElementById('globalSearch').value.toLowerCase();
-        document.querySelectorAll('tbody tr').forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
-        });
-    }
-};
-
-        // --- LÓGICA DE PDF Y MAPEO ---
-        const PDF_PROCESSOR = {
-            listaCanales: [],
-            async extraerRider(file) {
-                if(!file) return;
-                const reader = new FileReader();
-                reader.onload = async function() {
-                    const typedarray = new Uint8Array(this.result);
-                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                    let fullText = "";
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const content = await page.getTextContent();
-                        fullText += content.items.map(item => item.str).join(" ");
-                    }
-                    PDF_PROCESSOR.parsearCanales(fullText);
-                };
-                reader.readAsArrayBuffer(file);
-            },
-            parsearCanales: function(texto) {
-                const regexCanal = /(\d+)\s+([a-zA-Z\s]{3,20})/g;
-                let match;
-                this.listaCanales = [];
-                while ((match = regexCanal.exec(texto)) !== null) {
-                    this.listaCanales.push({ canal: match[1], instrumento: match[2].trim().toUpperCase() });
-                }
-                alert(`✅ Rider Procesado: Se detectaron ${this.listaCanales.length} canales.`);
-            }
-        };
-
-        const MAPPER_LOGIC = {
-            verificarVinculacion: function(itemEscaneado) {
-                if (!itemEscaneado.nombre_asig || itemEscaneado.tipo === 'CABLE') return;
-                const nombreBusqueda = itemEscaneado.nombre_asig.trim().toUpperCase();
-                const canalEncontrado = PDF_PROCESSOR.listaCanales.find(c => {
-                    const inst = c.instrumento.trim().toUpperCase();
-                    return nombreBusqueda.includes(inst) || inst.includes(nombreBusqueda);
-                });
-                if (canalEncontrado) {
-                    SyncSystem.sendScan({
-                        accion: 'ALERTA_VINCULACION',
-                        mensaje: `VINCULADO: ${itemEscaneado.nombre_asig} -> CANAL ${canalEncontrado.canal}`,
-                        canal: canalEncontrado.canal,
-                        instrumento: canalEncontrado.instrumento,
-                        familia: "DRUMS", // Predeterminado para prueba
-                        id_qr: itemEscaneado.id_qr
-                    });
-                }
-            }
-        };
-
-        // --- UI MÓVIL Y ACCIONES ---
-        const UI = {
-            // ESTO ES LO QUE TIENES QUE AÑADIR:
-            toggleSyncModal: () => {
-                const modal = document.getElementById('modal-sync');
-                modal.classList.toggle('hidden');
-            },
-            
-            panel: document.getElementById('action-panel'),
-            showNewItemForm: function(qrId) {
-                this.panel.innerHTML = `
-                    <h2>¡Nuevo QR Detectado!</h2>
-                    <p style="color:#aaa">ID: ${qrId}</p>
-                    <button class="btn-large btn-general" onclick="UI.renderForm('GENERAL', '${qrId}')">General (Micro/DI)</button>
-                    <button class="btn-large btn-cable" onclick="UI.renderForm('CABLE', '${qrId}')">Cable</button>
-                `;
-                this.panel.classList.remove('hidden');
-            },
-            renderForm: function(type, qrId) {
-                let fields = type === 'GENERAL' ? `<input type="text" id="n_asig" class="input-field" placeholder="Nombre Asignado (ej. Kick Out)">` : `<input type="text" id="longitud" class="input-field" placeholder="Longitud (ej. 10m)">`;
-                this.panel.innerHTML = `
-                    <h3>Registrar ${type}</h3>
-                    <input type="text" id="n_ser" class="input-field" placeholder="N/S (Opcional)">
-                    ${fields}
-                    <button class="btn-large btn-status-ok" onclick="UI.saveNew('${type}', '${qrId}')">Guardar y Sincronizar</button>
-                    <button class="btn-cancel" style="width:100%; border-color:#fff; color:#fff" onclick="UI.panel.classList.add('hidden')">Cancelar</button>
-                `;
-            },
-            showExistingItem: function(item) {
-                this.panel.innerHTML = `
-                    <div style="background:var(--card-bg); padding:20px; border-radius:12px; text-align:center;">
-                        <h2>${item.nombre_asig || item.tipologia}</h2>
-                        <p>N/S: ${item.ns} | ID: ${item.id_qr}</p>
-                        <button class="btn-large ${item.estado === 'OK' ? 'btn-status-ok' : 'btn-status-broken'}">ESTADO: ${item.estado}</button>
-                        <button class="btn-cancel" style="width:100%; border-color:#fff; color:#fff; margin-top:10px" onclick="UI.panel.classList.add('hidden')">Cerrar</button>
-                    </div>
-                `;
-                this.panel.classList.remove('hidden');
-            },
-saveNew: function(type, qrId) {
-    const data = { 
-        id_qr: qrId, 
-        ns: document.getElementById('n_ser').value, 
-        estado: 'OK', 
-        timestamp: new Date().getTime(), 
-        tipo: type,
-        nombre_asig: type === 'GENERAL' ? document.getElementById('n_asig').value : '',
-        longitud: type === 'CABLE' ? document.getElementById('longitud').value : '',
-        tipologia: type === 'CABLE' ? 'Cable/Adaptador' : 'Micro/DI'
+      } catch (e) {
+        console.error("Error PDF:", e);
+      }
     };
 
-    // 1. Guardar localmente
-    if(type === 'GENERAL') DB_MANAGER.addGeneral(data); 
-    else DB_MANAGER.addCable(data);
-    
-    // 2. Enviar al PC
-    SyncSystem.sendScan({ 
-        type: 'NEW_ENTRY', 
-        category: type === 'GENERAL' ? 'GENERAL' : 'CABLES', 
-        data: data 
+    reader.readAsArrayBuffer(file);
+  },
+
+  parsearCanales(texto) {
+    this.listaCanales = [];
+
+    const lineas = texto.split(/\n/);
+
+    for (const linea of lineas) {
+      const match = linea.match(/^(\d{1,3})\s+(.+)/);
+
+      if (match) {
+        this.listaCanales.push({
+          canal: match[1],
+          instrumento: match[2].trim().toUpperCase()
+        });
+      }
+    }
+
+    console.log("🎚 RIDER CARGADO:", this.listaCanales);
+  },
+
+  buscarCanalPorInstrumento(nombre) {
+    if (!nombre) return null;
+
+    const limpio = nombre.trim().toUpperCase();
+
+    return this.listaCanales.find(c => {
+      const inst = c.instrumento.toUpperCase();
+      return limpio.includes(inst) || inst.includes(limpio);
+    });
+  }
+};
+
+// =====================================================
+// DATABASE (LOCAL)
+// =====================================================
+const DB = {
+  KEYS: {
+    GENERAL: "inventario_general",
+    CABLES: "inventario_cables"
+  },
+
+  load(key) {
+    return JSON.parse(localStorage.getItem(key)) || [];
+  },
+
+  save(key, data) {
+    localStorage.setItem(key, JSON.stringify(data));
+    Sync.broadcast();
+  }
+};
+
+// =====================================================
+// SYNC SYSTEM (PEERJS)
+// =====================================================
+const Sync = {
+  peer: null,
+  conn: null,
+  peers: [],
+  isHost: true,
+
+  init() {
+    const id = "RD-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    this.peer = new Peer(id);
+
+    this.peer.on("open", () => {
+      document.getElementById("display-session-id").innerText = id;
     });
 
-    this.panel.innerHTML = "<h3 style='color:#2ecc71; text-align:center'>✅ Sincronizado</h3>";
-    setTimeout(() => {
-        this.panel.classList.add('hidden');
-        DASHBOARD.render(); 
-    }, 1000);
-},
-            updateConnectionStatus: function(isOnline = true) {
-        const dot = document.getElementById('connection-dot');
-        const text = document.getElementById('connection-text');
-        
-        if (isOnline) {
-            // Si hay móviles vinculados al PC, mostramos cuántos
-            const activos = SyncSystem.connections ? SyncSystem.connections.filter(c => c.open).length : 0;
-            
-            dot.className = "dot dot-online";
-            text.style.color = "#00e676";
-            
-            if (activos > 0) {
-                text.innerText = `ONLINE (${activos} dispositivos)`;
-            } else {
-                text.innerText = "ONLINE (Esperando vinculación...)";
-            }
-        } else {
-            // Este es el ELSE que preguntabas: se activa si falla el internet o PeerJS
-            dot.className = "dot dot-offline";
-            text.innerText = "OFFLINE - Error de Red";
-            text.style.color = "#ff5252";
-        }
-    },
-            notifyOffline: function() {
-                const toast = document.getElementById('offline-toast');
-                toast.innerText = `⚠️ ${SyncSystem.offlineQueue.length} pendientes`;
-                toast.classList.remove('hidden');
-            },
-            notifySyncSuccess: function() {
-                const toast = document.getElementById('offline-toast');
-                toast.innerText = `✅ Sincronizado`;
-                setTimeout(() => toast.classList.add('hidden'), 3000);
-            }
-        };
+    this.peer.on("connection", (c) => {
+      this.peers.push(c);
+      this.setup(c);
+      this.broadcast();
+    });
+  },
 
-        const PATCHER = {
-            currentMatch: null,
-            confirm: function() {
-                SyncSystem.sendScan({ accion: 'CONFIRMAR_PATCH', canal: this.currentMatch.canal, id_qr: this.currentMatch.id_qr });
-                document.getElementById('confirm-module').classList.add('hidden');
-            }
-        };
+  setup(conn) {
+    conn.on("data", (data) => {
 
-        const LOAD_OUT = {
-            itemsEnUso: [],
-            activar: function() {
-                const general = DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL);
-                const cables = DB_MANAGER.load(DB_MANAGER.KEYS.CABLES);
-                this.itemsEnUso = [...general, ...cables].filter(item => item.estado !== 'ESTROPEADO');
-                document.getElementById('items-left-count').innerText = this.itemsEnUso.length;
-                
-                // Mostrar alerta en PC, pero activar UI en móvil (requiere que el móvil sepa que está en loadout)
-                // Para propósitos de este código unificado, abrimos el panel localmente.
-                document.getElementById('loadout-screen').classList.remove('hidden');
-            },
-            procesarEscaneo: function(qrId) {
-                const index = this.itemsEnUso.findIndex(item => item.id_qr === qrId);
-                if (index !== -1) {
-                    this.itemsEnUso.splice(index, 1);
-                    document.getElementById('items-left-count').innerText = this.itemsEnUso.length;
-                    UI.panel.innerHTML = `<h3 style="color:var(--accent)">✅ Recogido</h3>`;
-                    UI.panel.classList.remove('hidden');
-                    setTimeout(() => UI.panel.classList.add('hidden'), 1000);
-                    if (this.itemsEnUso.length === 0) alert("🎉 Todo el equipo está recogido. Puedes cerrar sesión.");
-                } else {
-                    alert("⚠️ Este objeto no estaba en uso o ya fue recogido.");
-                }
-            }
-        };
+      if (data.type === "SYNC") {
+        localStorage.setItem(DB.KEYS.GENERAL, JSON.stringify(data.general));
+        localStorage.setItem(DB.KEYS.CABLES, JSON.stringify(data.cables));
 
-        const MAINTENANCE = {
-            generateReport: function() {
-                const general = DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL);
-                const cables = DB_MANAGER.load(DB_MANAGER.KEYS.CABLES);
-                const averiados = [...general, ...cables].filter(item => item.estado === 'ESTROPEADO');
-                if (averiados.length === 0) return alert("✅ ¡Todo el equipo está en perfecto estado!");
-                let reportText = "📋 REPORTE DE MANTENIMIENTO\n===========================\n\n";
-                averiados.forEach((item, i) => reportText += `${i+1}. [${item.id_qr}] ${item.nombre_asig || item.tipologia} (N/S: ${item.ns})\n`);
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(new Blob([reportText], { type: 'text/plain' }));
-                a.download = `mantenimiento.txt`;
-                a.click();
-            }
-        };
+        this.isHost = false;
+        DASHBOARD.render();
+      }
+    });
+  },
 
-     // --- INICIALIZACIÓN GLOBAL ---
-window.onload = () => {
-    // 1. Forzar el renderizado inicial de lo que haya en LocalStorage
-    DASHBOARD.render(); 
-    
-    // 2. Arrancar PeerJS
-    SyncSystem.init();
+  connect(hostId) {
+    this.conn = this.peer.connect(hostId);
+    this.isHost = false;
 
-    // 3. Configurar el Escáner
-    const scanner = new Html5Qrcode("reader");
-    const config = { 
-        fps: 20, 
-        qrbox: { width: 250, height: 250 }, 
-        aspectRatio: 1.0 
+    this.conn.on("open", () => {
+      UI.updateConnectionStatus(true);
+    });
+
+    this.setup(this.conn);
+  },
+
+  broadcast() {
+    if (!this.isHost) return;
+
+    const data = {
+      type: "SYNC",
+      general: DB.load(DB.KEYS.GENERAL),
+      cables: DB.load(DB.KEYS.CABLES)
     };
 
-    scanner.start({ facingMode: "environment" }, config, (msg) => {
-        if (navigator.vibrate) navigator.vibrate(100);
-        
-        const modoRecogida = !document.getElementById('loadout-screen').classList.contains('hidden');
-        
-        if (modoRecogida) {
-            LOAD_OUT.procesarEscaneo(msg);
-        } else {
-            // Buscamos si el QR ya existe en alguna de las dos tablas
-            const todos = [...DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL), ...DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)];
-            const item = todos.find(x => x.id_qr === msg);
-            
-            if (item) {
-                UI.showExistingItem(item);
-            } else {
-                UI.showNewItemForm(msg);
-            }
-        }
-    }).catch(e => console.warn("Esperando permisos de cámara...", e));
+    this.peers.forEach(p => p.send(data));
+  }
 };
-window.addEventListener('online', () => UI.updateConnectionStatus(true));
-window.addEventListener('offline', () => UI.updateConnectionStatus(false));
+
+// =====================================================
+// DASHBOARD (MINIMAL FUNCIONAL)
+// =====================================================
+const DASHBOARD = {
+  render() {
+    console.log("Dashboard OK");
+  }
+};
+
+// =====================================================
+// LOADOUT
+// =====================================================
+const LOADOUT = {
+  items: []
+};
+
+// =====================================================
+// INIT APP
+// =====================================================
+window.onload = () => {
+
+  DASHBOARD.render();
+  Sync.init();
+
+  const scanner = new Html5Qrcode("reader");
+
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+
+    (qr) => {
+
+      const items = [
+        ...DB.load(DB.KEYS.GENERAL),
+        ...DB.load(DB.KEYS.CABLES)
+      ];
+
+      const item = items.find(x => x.id_qr === qr);
+
+      if (!item) {
+        UI.showNewItemForm(qr);
+        return;
+      }
+
+      const canal = PDF_PROCESSOR.buscarCanalPorInstrumento(
+        item.nombre_asig
+      );
+
+      UI.showExistingItem(item, canal);
+    }
+  );
+};
 </script>
 </body>
 </html>
