@@ -10,6 +10,19 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 
     <style>
+#reader {
+    border: 2px solid #2ecc71 !important;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+#reader video {
+    object-fit: cover !important;
+}
+
+/* Ocultar el modal viejo que ya no usaremos */
+#modal-sync { display: none; }
+
 :root {
     --bg-principal: #0f0f0f;
     --bg-tarjeta: #1a1a1a;
@@ -175,14 +188,12 @@ code {
         <header class="main-header">
             <div>
               <h1>Gestor de Inventario Raider</h1>
-                <div id="sync-code" style="margin-top: 10px;">SESIÓN: <span id="display-session-id" style="color: var(--accent); font-weight: bold;">---</span></div>
-            </div>
+<div id="sync-code">SESIÓN: <span id="display-session-id" style="color: var(--verde-tecnico); font-weight: bold;">---</span></div>            </div>
             <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
                 <input type="file" id="pdf-upload" style="display: none;" onchange="PDF_PROCESSOR.extraerRider(this.files[0])">
                 <button class="btn-report" style="background: #2196f3; color: white;" onclick="document.getElementById('pdf-upload').click()">📂 Cargar Rider (PDF)</button>
                 <button class="btn-report" onclick="MAINTENANCE.generateReport()">📋 Reporte Mantenimiento</button>
                 <button class="btn-report" style="background: #e91e63; color: white;" onclick="LOAD_OUT.activar()">📦 Iniciar Recogida</button>
-                <button class="btn-accion btn-sync" onclick="UI.toggleSyncModal()">Sincronizar Dispositivo</button>
             </div>
         </header>
 
@@ -250,14 +261,7 @@ code {
         <span id="connection-text" style="color: #00e676; font-weight: bold;">ONLINE</span>
         <span id="offline-toast" class="hidden" style="margin-left: auto; color: #ff9800; font-size: 0.8rem;"></span>
     </div>
-<div id="modal-sync" class="overlay hidden">
-    <div class="modal-sync">
-        <h3>Vincular Dispositivo Externo</h3>
-        <p>Introduce este código en tu móvil para sincronizar:</p>
-        <div id="display-session-id" class="session-id-display">----</div>
-        <button class="btn-accion" style="width: 100%;" onclick="UI.toggleSyncModal()">Cerrar</button>
-    </div>
-</div>
+
     <script>
         // Diccionarios y Configuración
         const FOLDER_COLORS = { DRUMS: '#ff5252', BASS: '#7c4dff', GUITARS: '#ffab40', KEYS: '#448aff', VOCALS: '#eeff41', PERC: '#69f0ae' };
@@ -302,7 +306,6 @@ code {
         this.peer.on('connection', (c) => {
             this.conn = c;
             this.setupListeners();
-            UI.toggleSyncModal();
             alert("¡Dispositivo vinculado!");
         });
     },
@@ -531,29 +534,35 @@ code {
             }
         };
 
-        // --- INICIALIZACIÓN GLOBAL ---
-        window.onload = () => {
-            DASHBOARD.render();
-            SyncSystem.init();
+     // --- INICIALIZACIÓN GLOBAL ---
+window.onload = () => {
+    DASHBOARD.render();
+    SyncSystem.init();
 
-            // Iniciar Lector QR (Móvil)
-            const html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (qrCodeMessage) => {
-                const modoRecogidaActivo = !document.getElementById('loadout-screen').classList.contains('hidden');
-                if (modoRecogidaActivo) {
-                    LOAD_OUT.procesarEscaneo(qrCodeMessage);
-                } else {
-                    const item = DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL).concat(DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)).find(i => i.id_qr === qrCodeMessage);
-                    if(item) UI.showExistingItem(item); else UI.showNewItemForm(qrCodeMessage);
-                    SyncSystem.sendScan({ id_qr: qrCodeMessage, timestamp: new Date().getTime() });
-                }
-            }).catch(err => console.warn("Lector QR no iniciado. Requiere cámara y HTTPS."));
-            
-            // Listeners de Red
-            window.addEventListener('online', () => { UI.updateConnectionStatus(true); SyncSystem.processQueue(); });
-            window.addEventListener('offline', () => UI.updateConnectionStatus(false));
-        };
+    const scanner = new Html5Qrcode("reader");
+    const config = { 
+        fps: 20, 
+        qrbox: { width: 250, height: 250 }, 
+        aspectRatio: 1.0 
+    };
 
-    </script>
+    scanner.start({ facingMode: "environment" }, config, (msg) => {
+        if (navigator.vibrate) navigator.vibrate(100);
+        
+        const modoRecogida = !document.getElementById('loadout-screen').classList.contains('hidden');
+        
+        if (modoRecogida) {
+            LOAD_OUT.procesarEscaneo(msg);
+        } else {
+            const todos = [...DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL), ...DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)];
+            const item = todos.find(x => x.id_qr === msg);
+            item ? UI.showExistingItem(item) : UI.showNewItemForm(msg);
+        }
+    }).catch(e => console.error("Error cámara", e));
+};
+
+window.addEventListener('online', () => UI.updateConnectionStatus(true));
+window.addEventListener('offline', () => UI.updateConnectionStatus(false));
+</script>
 </body>
 </html>
