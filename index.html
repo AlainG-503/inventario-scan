@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechControl Pro - Sistema de Inventario</title>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+
+    <style>
+:root {
+    --bg-principal: #0f0f0f;
+    --bg-tarjeta: #1a1a1a;
+    --verde-tecnico: #2ecc71;
+    --naranja-aviso: #e67e22;
+    --rojo-error: #e74c3c;
+    --texto-claro: #ececec;
+    --texto-dim: #888888;
+    --borde: #2d2d2d;
+}
+
+body { 
+    background-color: var(--bg-principal); 
+    color: var(--texto-claro); 
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    margin: 0; 
+    line-height: 1.5;
+}
+
+.hidden { display: none !important; }
+
+/* CABECERA PROFESIONAL */
+.navbar { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 15px 30px; 
+    background: var(--bg-tarjeta); 
+    border-bottom: 1px solid var(--borde);
+}
+
+.navbar h1 { 
+    font-size: 1.2rem; 
+    font-weight: 700; 
+    letter-spacing: 0.5px; 
+    margin: 0; 
+    color: var(--texto-claro);
+    text-transform: uppercase;
+}
+
+/* BOTONES TÉCNICOS */
+.btn-accion {
+    background: #252525;
+    color: var(--texto-claro);
+    border: 1px solid var(--borde);
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+}
+
+.btn-accion:hover { 
+    background: #333; 
+    border-color: #555; 
+}
+
+.btn-sync { 
+    border-color: var(--verde-tecnico); 
+    color: var(--verde-tecnico); 
+}
+
+/* CONTENEDORES Y TABLAS */
+.container { padding: 20px; }
+
+.grid-tablas { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 20px; 
+}
+
+@media (max-width: 900px) { 
+    .grid-tablas { grid-template-columns: 1fr; } 
+}
+
+.card { 
+    background: var(--bg-tarjeta); 
+    border-radius: 8px; 
+    padding: 20px; 
+    border: 1px solid var(--borde);
+}
+
+.card h2 { 
+    font-size: 0.85rem; 
+    color: var(--texto-dim); 
+    text-transform: uppercase; 
+    margin-top: 0; 
+    margin-bottom: 20px; 
+    border-bottom: 1px solid var(--borde); 
+    padding-bottom: 10px; 
+    letter-spacing: 1px;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th { text-align: left; color: var(--texto-dim); font-weight: 500; padding: 12px 8px; border-bottom: 1px solid var(--borde); }
+td { padding: 12px 8px; border-bottom: 1px solid #222; }
+
+/* CÓDIGOS QR ESTILO TERMINAL */
+code { 
+    background: #000; 
+    padding: 3px 8px; 
+    border-radius: 4px; 
+    font-family: 'Courier New', monospace; 
+    color: var(--verde-tecnico); 
+    border: 1px solid #222;
+}
+
+/* VENTANA MODAL DE SINCRONIZACIÓN */
+.overlay { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0,0,0,0.9); 
+    backdrop-filter: blur(8px);
+    z-index: 1000; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+}
+
+.modal-sync {
+    background: var(--bg-tarjeta);
+    padding: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--verde-tecnico);
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 0 30px rgba(46, 204, 113, 0.1);
+}
+
+.session-id-display {
+    font-size: 2.8rem;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 6px;
+    color: var(--verde-tecnico);
+    margin: 25px 0;
+    padding: 15px;
+    background: #000;
+    border-radius: 8px;
+    border: 1px solid #333;
+}
+
+/* BADGES DE ESTADO */
+.badge { 
+    padding: 4px 10px; 
+    border-radius: 3px; 
+    font-size: 0.7rem; 
+    font-weight: 800; 
+    text-transform: uppercase;
+}
+.badge-ok { background: rgba(46, 204, 113, 0.15); color: var(--verde-tecnico); }
+.badge-error { background: rgba(231, 76, 60, 0.15); color: var(--rojo-error); }
+    </style>
+</head>
+<body>
+
+    <div id="pc-dashboard">
+        <header class="main-header">
+            <div>
+              <h1>Gestor de Inventario Raider</h1>
+                <div id="sync-code" style="margin-top: 10px;">SESIÓN: <span id="display-session-id" style="color: var(--accent); font-weight: bold;">---</span></div>
+            </div>
+            <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+                <input type="file" id="pdf-upload" style="display: none;" onchange="PDF_PROCESSOR.extraerRider(this.files[0])">
+                <button class="btn-report" style="background: #2196f3; color: white;" onclick="document.getElementById('pdf-upload').click()">📂 Cargar Rider (PDF)</button>
+                <button class="btn-report" onclick="MAINTENANCE.generateReport()">📋 Reporte Mantenimiento</button>
+                <button class="btn-report" style="background: #e91e63; color: white;" onclick="LOAD_OUT.activar()">📦 Iniciar Recogida</button>
+                <button class="btn-accion btn-sync" onclick="UI.toggleSyncModal()">Sincronizar Dispositivo</button>
+            </div>
+        </header>
+
+        <section class="search-section">
+            <input type="text" id="globalSearch" placeholder="🔍 Buscar por ID_QR, Nombre o N/S..." onkeyup="DASHBOARD.filterTables()">
+        </section>
+
+        <div class="tables-container">
+            <div class="table-card">
+                <h2>Inventario General (Micros, DI, Monitores)</h2>
+                <div class="scroll-area">
+                    <table id="tableGeneral">
+                        <thead><tr><th>ID_QR</th><th>N/S</th><th>Nombre Asignado</th><th>Estado</th></tr></thead>
+                        <tbody id="bodyGeneral"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>Inventario de Cables</h2>
+                <div class="scroll-area">
+                    <table id="tableCables">
+                        <thead><tr><th>ID_QR</th><th>Tipología</th><th>Longitud</th><th>Estado</th></tr></thead>
+                        <tbody id="bodyCables"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mobile-app" style="padding: 10px;">
+        <div id="reader-container">
+            <div id="reader"></div>
+        </div>
+<div id="mobile-sync-controls" style="background: #222; padding: 10px; margin-bottom: 10px;">
+    <input type="text" id="input-host-id" placeholder="Código PC (ej: RD-A1B2)" style="width: 60%;">
+    <button onclick="SyncSystem.connectToHost(document.getElementById('input-host-id').value)">Vincular</button>
+</div>
+        <div id="action-panel" class="hidden" style="margin-top: 20px;"></div>
+
+        <div id="loadout-screen" class="hidden">
+            <div class="counter-header">
+                <span id="items-left-count">0</span>
+                <p>EQUIPOS PENDIENTES</p>
+            </div>
+            <button class="btn-large" style="background: #333; color: white;" onclick="document.getElementById('loadout-screen').classList.add('hidden')">Cerrar Recogida</button>
+        </div>
+    </div>
+
+    <div id="confirm-module" class="modal-overlay hidden">
+        <div id="channel-card" class="card-large">
+            <div id="card-header"><span id="instrument-family">FAMILIA</span></div>
+            <div id="channel-number">01</div>
+            <div id="patch-info">
+                <h2 id="patch-name">INSTRUMENTO</h2>
+                <p id="mic-model" style="margin-top: 5px; font-weight: bold;">--</p>
+            </div>
+            <button class="btn-confirm-patch" onclick="PATCHER.confirm()">CONFIRMAR CONEXIÓN</button>
+            <button class="btn-cancel" onclick="document.getElementById('confirm-module').classList.add('hidden')">CANCELAR</button>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="connection-dot" class="dot dot-online"></span>
+        <span id="connection-text" style="color: #00e676; font-weight: bold;">ONLINE</span>
+        <span id="offline-toast" class="hidden" style="margin-left: auto; color: #ff9800; font-size: 0.8rem;"></span>
+    </div>
+<div id="modal-sync" class="overlay hidden">
+    <div class="modal-sync">
+        <h3>Vincular Dispositivo Externo</h3>
+        <p>Introduce este código en tu móvil para sincronizar:</p>
+        <div id="display-session-id" class="session-id-display">----</div>
+        <button class="btn-accion" style="width: 100%;" onclick="UI.toggleSyncModal()">Cerrar</button>
+    </div>
+</div>
+    <script>
+        // Diccionarios y Configuración
+        const FOLDER_COLORS = { DRUMS: '#ff5252', BASS: '#7c4dff', GUITARS: '#ffab40', KEYS: '#448aff', VOCALS: '#eeff41', PERC: '#69f0ae' };
+
+        // --- GESTOR DE BASE DE DATOS LOCAL ---
+        const DB_MANAGER = {
+            KEYS: { GENERAL: 'inventario_general', CABLES: 'inventario_cables' },
+            save: function(key, data) {
+                try { localStorage.setItem(key, JSON.stringify(data)); } 
+                catch (error) { console.error("Error localStorage:", error); }
+            },
+            load: function(key) { return JSON.parse(localStorage.getItem(key)) || []; },
+            addGeneral: function(item) {
+                let inventario = this.load(this.KEYS.GENERAL);
+                // Evitar duplicados
+                const index = inventario.findIndex(i => i.id_qr === item.id_qr);
+                if(index > -1) inventario[index] = item; else inventario.push(item);
+                this.save(this.KEYS.GENERAL, inventario);
+            },
+            addCable: function(cable) {
+                let inventario = this.load(this.KEYS.CABLES);
+                const index = inventario.findIndex(i => i.id_qr === cable.id_qr);
+                if(index > -1) inventario[index] = cable; else inventario.push(cable);
+                this.save(this.KEYS.CABLES, inventario);
+            }
+        };
+
+        // --- SISTEMA DE SINCRONIZACIÓN (PEER.JS) ---
+    const SyncSystem = {
+    peer: null,
+    conn: null,
+    init: function() {
+        const id = 'RD-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+        this.peer = new Peer(id);
+        
+        this.peer.on('open', (id) => {
+            document.getElementById('display-session-id').innerText = id;
+            // Si detectamos que es un móvil (puedes añadir un prompt o botón)
+            // se podría conectar aquí. Por ahora, el PC solo escucha:
+        });
+
+        this.peer.on('connection', (c) => {
+            this.conn = c;
+            this.setupListeners();
+            UI.toggleSyncModal();
+            alert("¡Dispositivo vinculado!");
+        });
+    },
+    // ESTA FUNCIÓN ES LA QUE LE FALTA A TU CÓDIGO
+    sendScan: function(payload) {
+        if (this.conn && this.conn.open) {
+            // Formateamos para que el PC lo entienda como 'NEW_ENTRY'
+            this.conn.send({
+                type: 'NEW_ENTRY',
+                category: payload.datos?.tipo || 'GENERAL',
+                data: payload.datos || payload
+            });
+        } else {
+            console.warn("No hay conexión activa con el PC");
+        }
+    },
+    setupListeners: function() {
+        this.conn.on('data', (payload) => {
+            if(payload.type === 'NEW_ENTRY') {
+                if(payload.category === 'GENERAL') DB_MANAGER.addGeneral(payload.data);
+                else DB_MANAGER.addCable(payload.data);
+                DASHBOARD.render(); 
+            }
+        });
+    },
+    // Función para que el MÓVIL se conecte al PC
+    connectToHost: function(hostId) {
+        this.conn = this.peer.connect(hostId);
+        this.setupListeners();
+    }
+};
+
+
+        // --- DASHBOARD (INTERFAZ PC) ---
+        const DASHBOARD = {
+            render: function() {
+                this.renderTable('bodyGeneral', DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL));
+                this.renderTable('bodyCables', DB_MANAGER.load(DB_MANAGER.KEYS.CABLES));
+            },
+            renderTable: function(elementId, data) {
+                document.getElementById(elementId).innerHTML = data.map(item => `
+                    <tr class="${item.estado === 'ESTROPEADO' ? 'row-alert' : ''}">
+                        <td><code>${item.id_qr}</code></td>
+                        <td>${item.ns || '---'}</td>
+                        <td>${item.nombre_asig || item.tipologia}</td>
+                        <td><span class="status-badge ${item.estado === 'OK' ? 'status-ok' : 'status-broken'}">${item.estado}</span></td>
+                    </tr>
+                `).join('');
+            },
+            filterTables: function() {
+                const query = document.getElementById('globalSearch').value.toLowerCase();
+                document.querySelectorAll('tbody tr').forEach(row => {
+                    row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
+                });
+            }
+        };
+
+        // --- LÓGICA DE PDF Y MAPEO ---
+        const PDF_PROCESSOR = {
+            listaCanales: [],
+            async extraerRider(file) {
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = async function() {
+                    const typedarray = new Uint8Array(this.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let fullText = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        fullText += content.items.map(item => item.str).join(" ");
+                    }
+                    PDF_PROCESSOR.parsearCanales(fullText);
+                };
+                reader.readAsArrayBuffer(file);
+            },
+            parsearCanales: function(texto) {
+                const regexCanal = /(\d+)\s+([a-zA-Z\s]{3,20})/g;
+                let match;
+                this.listaCanales = [];
+                while ((match = regexCanal.exec(texto)) !== null) {
+                    this.listaCanales.push({ canal: match[1], instrumento: match[2].trim().toUpperCase() });
+                }
+                alert(`✅ Rider Procesado: Se detectaron ${this.listaCanales.length} canales.`);
+            }
+        };
+
+        const MAPPER_LOGIC = {
+            verificarVinculacion: function(itemEscaneado) {
+                if (!itemEscaneado.nombre_asig || itemEscaneado.tipo === 'CABLE') return;
+                const nombreBusqueda = itemEscaneado.nombre_asig.trim().toUpperCase();
+                const canalEncontrado = PDF_PROCESSOR.listaCanales.find(c => {
+                    const inst = c.instrumento.trim().toUpperCase();
+                    return nombreBusqueda.includes(inst) || inst.includes(nombreBusqueda);
+                });
+                if (canalEncontrado) {
+                    SyncSystem.sendScan({
+                        accion: 'ALERTA_VINCULACION',
+                        mensaje: `VINCULADO: ${itemEscaneado.nombre_asig} -> CANAL ${canalEncontrado.canal}`,
+                        canal: canalEncontrado.canal,
+                        instrumento: canalEncontrado.instrumento,
+                        familia: "DRUMS", // Predeterminado para prueba
+                        id_qr: itemEscaneado.id_qr
+                    });
+                }
+            }
+        };
+
+        // --- UI MÓVIL Y ACCIONES ---
+        const UI = {
+            // ESTO ES LO QUE TIENES QUE AÑADIR:
+            toggleSyncModal: () => {
+                const modal = document.getElementById('modal-sync');
+                modal.classList.toggle('hidden');
+            },
+            
+            panel: document.getElementById('action-panel'),
+            showNewItemForm: function(qrId) {
+                this.panel.innerHTML = `
+                    <h2>¡Nuevo QR Detectado!</h2>
+                    <p style="color:#aaa">ID: ${qrId}</p>
+                    <button class="btn-large btn-general" onclick="UI.renderForm('GENERAL', '${qrId}')">General (Micro/DI)</button>
+                    <button class="btn-large btn-cable" onclick="UI.renderForm('CABLE', '${qrId}')">Cable</button>
+                `;
+                this.panel.classList.remove('hidden');
+            },
+            renderForm: function(type, qrId) {
+                let fields = type === 'GENERAL' ? `<input type="text" id="n_asig" class="input-field" placeholder="Nombre Asignado (ej. Kick Out)">` : `<input type="text" id="longitud" class="input-field" placeholder="Longitud (ej. 10m)">`;
+                this.panel.innerHTML = `
+                    <h3>Registrar ${type}</h3>
+                    <input type="text" id="n_ser" class="input-field" placeholder="N/S (Opcional)">
+                    ${fields}
+                    <button class="btn-large btn-status-ok" onclick="UI.saveNew('${type}', '${qrId}')">Guardar y Sincronizar</button>
+                    <button class="btn-cancel" style="width:100%; border-color:#fff; color:#fff" onclick="UI.panel.classList.add('hidden')">Cancelar</button>
+                `;
+            },
+            showExistingItem: function(item) {
+                this.panel.innerHTML = `
+                    <div style="background:var(--card-bg); padding:20px; border-radius:12px; text-align:center;">
+                        <h2>${item.nombre_asig || item.tipologia}</h2>
+                        <p>N/S: ${item.ns} | ID: ${item.id_qr}</p>
+                        <button class="btn-large ${item.estado === 'OK' ? 'btn-status-ok' : 'btn-status-broken'}">ESTADO: ${item.estado}</button>
+                        <button class="btn-cancel" style="width:100%; border-color:#fff; color:#fff; margin-top:10px" onclick="UI.panel.classList.add('hidden')">Cerrar</button>
+                    </div>
+                `;
+                this.panel.classList.remove('hidden');
+            },
+            saveNew: function(type, qrId) {
+                const data = { id_qr: qrId, ns: document.getElementById('n_ser').value, estado: 'OK', timestamp: new Date().getTime(), tipo: type };
+                if(type === 'GENERAL') data.nombre_asig = document.getElementById('n_asig').value;
+                else data.longitud = document.getElementById('longitud').value;
+                
+                if(type === 'GENERAL') DB_MANAGER.addGeneral(data); else DB_MANAGER.addCable(data);
+                SyncSystem.sendScan({ accion: 'NUEVO_REGISTRO', datos: data });
+                this.panel.innerHTML = "<h3>✅ Guardado</h3>";
+                setTimeout(() => this.panel.classList.add('hidden'), 1500);
+            },
+            updateConnectionStatus: function(isOnline) {
+                const dot = document.getElementById('connection-dot');
+                const text = document.getElementById('connection-text');
+                if (isOnline) {
+                    dot.className = "dot dot-online"; text.innerText = "ONLINE"; text.style.color = "#00e676";
+                } else {
+                    dot.className = "dot dot-offline"; text.innerText = "OFFLINE"; text.style.color = "#ff5252";
+                }
+            },
+            notifyOffline: function() {
+                const toast = document.getElementById('offline-toast');
+                toast.innerText = `⚠️ ${SyncSystem.offlineQueue.length} pendientes`;
+                toast.classList.remove('hidden');
+            },
+            notifySyncSuccess: function() {
+                const toast = document.getElementById('offline-toast');
+                toast.innerText = `✅ Sincronizado`;
+                setTimeout(() => toast.classList.add('hidden'), 3000);
+            }
+        };
+
+        const PATCHER = {
+            currentMatch: null,
+            confirm: function() {
+                SyncSystem.sendScan({ accion: 'CONFIRMAR_PATCH', canal: this.currentMatch.canal, id_qr: this.currentMatch.id_qr });
+                document.getElementById('confirm-module').classList.add('hidden');
+            }
+        };
+
+        const LOAD_OUT = {
+            itemsEnUso: [],
+            activar: function() {
+                const general = DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL);
+                const cables = DB_MANAGER.load(DB_MANAGER.KEYS.CABLES);
+                this.itemsEnUso = [...general, ...cables].filter(item => item.estado !== 'ESTROPEADO');
+                document.getElementById('items-left-count').innerText = this.itemsEnUso.length;
+                
+                // Mostrar alerta en PC, pero activar UI en móvil (requiere que el móvil sepa que está en loadout)
+                // Para propósitos de este código unificado, abrimos el panel localmente.
+                document.getElementById('loadout-screen').classList.remove('hidden');
+            },
+            procesarEscaneo: function(qrId) {
+                const index = this.itemsEnUso.findIndex(item => item.id_qr === qrId);
+                if (index !== -1) {
+                    this.itemsEnUso.splice(index, 1);
+                    document.getElementById('items-left-count').innerText = this.itemsEnUso.length;
+                    UI.panel.innerHTML = `<h3 style="color:var(--accent)">✅ Recogido</h3>`;
+                    UI.panel.classList.remove('hidden');
+                    setTimeout(() => UI.panel.classList.add('hidden'), 1000);
+                    if (this.itemsEnUso.length === 0) alert("🎉 Todo el equipo está recogido. Puedes cerrar sesión.");
+                } else {
+                    alert("⚠️ Este objeto no estaba en uso o ya fue recogido.");
+                }
+            }
+        };
+
+        const MAINTENANCE = {
+            generateReport: function() {
+                const general = DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL);
+                const cables = DB_MANAGER.load(DB_MANAGER.KEYS.CABLES);
+                const averiados = [...general, ...cables].filter(item => item.estado === 'ESTROPEADO');
+                if (averiados.length === 0) return alert("✅ ¡Todo el equipo está en perfecto estado!");
+                let reportText = "📋 REPORTE DE MANTENIMIENTO\n===========================\n\n";
+                averiados.forEach((item, i) => reportText += `${i+1}. [${item.id_qr}] ${item.nombre_asig || item.tipologia} (N/S: ${item.ns})\n`);
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([reportText], { type: 'text/plain' }));
+                a.download = `mantenimiento.txt`;
+                a.click();
+            }
+        };
+
+        // --- INICIALIZACIÓN GLOBAL ---
+        window.onload = () => {
+            DASHBOARD.render();
+            SyncSystem.init();
+
+            // Iniciar Lector QR (Móvil)
+            const html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (qrCodeMessage) => {
+                const modoRecogidaActivo = !document.getElementById('loadout-screen').classList.contains('hidden');
+                if (modoRecogidaActivo) {
+                    LOAD_OUT.procesarEscaneo(qrCodeMessage);
+                } else {
+                    const item = DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL).concat(DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)).find(i => i.id_qr === qrCodeMessage);
+                    if(item) UI.showExistingItem(item); else UI.showNewItemForm(qrCodeMessage);
+                    SyncSystem.sendScan({ id_qr: qrCodeMessage, timestamp: new Date().getTime() });
+                }
+            }).catch(err => console.warn("Lector QR no iniciado. Requiere cámara y HTTPS."));
+            
+            // Listeners de Red
+            window.addEventListener('online', () => { UI.updateConnectionStatus(true); SyncSystem.processQueue(); });
+            window.addEventListener('offline', () => UI.updateConnectionStatus(false));
+        };
+
+    </script>
+</body>
+</html>
