@@ -224,7 +224,7 @@ const SyncSystem = {
     peer: null,
     conn: null, 
     connections: [], 
-    isPC: true, // Por defecto asumimos que es el PC (Central)
+    isPC: true,
 
     init: function() {
         const id = 'RD-' + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -237,37 +237,43 @@ const SyncSystem = {
         this.peer.on('connection', (c) => {
             this.connections.push(c);
             this.setupListeners(c);
-            this.broadcastUpdate(); // Al conectar un móvil, le mandamos todo
-            alert("¡Terminal Vinculado!");
+            this.broadcastUpdate(); 
             UI.updateConnectionStatus(true);
         });
     },
 
     setupListeners: function(connection) {
         connection.on('data', (payload) => {
-            // Si el móvil manda un escaneo al PC
+            // Caso A: El PC recibe un escaneo nuevo del móvil
             if(payload.type === 'NEW_ENTRY') {
                 if(payload.category === 'GENERAL') DB_MANAGER.addGeneral(payload.data);
                 else DB_MANAGER.addCable(payload.data);
                 DASHBOARD.render();
-                if(this.isPC) this.broadcastUpdate(); // El PC rebota el cambio a otros móviles
+                if(this.isPC) this.broadcastUpdate(); 
             }
-            // Si el PC manda la actualización total a los móviles
+            // Caso B: El móvil recibe la base de datos completa del PC
             if(payload.type === 'SYNC_ALL') {
                 localStorage.setItem(DB_MANAGER.KEYS.GENERAL, JSON.stringify(payload.general));
                 localStorage.setItem(DB_MANAGER.KEYS.CABLES, JSON.stringify(payload.cables));
-                
-                // CAMBIO DE ID AUTOMÁTICO EN EL MÓVIL
                 document.getElementById('display-session-id').innerText = payload.hostId + " (VINCULADO)";
-                this.isPC = false; // El móvil sabe que ya no es central
+                this.isPC = false;
                 DASHBOARD.render();
             }
         });
     },
 
+    // ESTA FUNCIÓN FALTABA Y ES POR LO QUE EL MÓVIL NO ENVIABA NADA
+    sendScan: function(data) {
+        if (this.isPC) return; // El PC no envía escaneos individuales
+        if (this.conn && this.conn.open) {
+            this.conn.send(data);
+        } else {
+            alert("No hay conexión con el PC");
+        }
+    },
+
     broadcastUpdate: function() {
-        if(!this.isPC) return; // Solo la central emite cambios globales
-        
+        if(!this.isPC) return; 
         const data = {
             type: 'SYNC_ALL',
             hostId: this.peer.id,
@@ -281,11 +287,11 @@ const SyncSystem = {
 
     connectToHost: function(hostId) {
         this.conn = this.peer.connect(hostId);
-        this.isPC = false; // Al conectar, pasamos a modo terminal
+        this.isPC = false;
         this.setupListeners(this.conn);
+        this.conn.on('open', () => UI.updateConnectionStatus(true));
     }
 };
-
 const DASHBOARD = {
     render: function() {
         this.renderTableGeneral(DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL));
@@ -461,9 +467,11 @@ saveNew: function(type, qrId) {
         tipologia: type === 'CABLE' ? 'Cable/Adaptador' : 'Micro/DI'
     };
 
-    if(type === 'GENERAL') DB_MANAGER.addGeneral(data); else DB_MANAGER.addCable(data);
+    // 1. Guardar localmente
+    if(type === 'GENERAL') DB_MANAGER.addGeneral(data); 
+    else DB_MANAGER.addCable(data);
     
-    // Aquí enviamos la categoría correcta (GENERAL o CABLES) para que el receptor la procese
+    // 2. Enviar al PC
     SyncSystem.sendScan({ 
         type: 'NEW_ENTRY', 
         category: type === 'GENERAL' ? 'GENERAL' : 'CABLES', 
@@ -474,7 +482,7 @@ saveNew: function(type, qrId) {
     setTimeout(() => {
         this.panel.classList.add('hidden');
         DASHBOARD.render(); 
-    }, 1200);
+    }, 1000);
 },
             updateConnectionStatus: function(isOnline = true) {
         const dot = document.getElementById('connection-dot');
@@ -563,10 +571,13 @@ saveNew: function(type, qrId) {
 
      // --- INICIALIZACIÓN GLOBAL ---
 window.onload = () => {
+    // 1. Forzar el renderizado inicial de lo que haya en LocalStorage
     DASHBOARD.render(); 
     
+    // 2. Arrancar PeerJS
     SyncSystem.init();
 
+    // 3. Configurar el Escáner
     const scanner = new Html5Qrcode("reader");
     const config = { 
         fps: 20, 
@@ -582,13 +593,18 @@ window.onload = () => {
         if (modoRecogida) {
             LOAD_OUT.procesarEscaneo(msg);
         } else {
+            // Buscamos si el QR ya existe en alguna de las dos tablas
             const todos = [...DB_MANAGER.load(DB_MANAGER.KEYS.GENERAL), ...DB_MANAGER.load(DB_MANAGER.KEYS.CABLES)];
             const item = todos.find(x => x.id_qr === msg);
-            item ? UI.showExistingItem(item) : UI.showNewItemForm(msg);
+            
+            if (item) {
+                UI.showExistingItem(item);
+            } else {
+                UI.showNewItemForm(msg);
+            }
         }
-    }).catch(e => console.error("Error cámara", e));
+    }).catch(e => console.warn("Esperando permisos de cámara...", e));
 };
-
 window.addEventListener('online', () => UI.updateConnectionStatus(true));
 window.addEventListener('offline', () => UI.updateConnectionStatus(false));
 </script>
